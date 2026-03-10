@@ -23,6 +23,10 @@ app.use((req, res, next) => {
   });
 });
 
+app.use('/pyrus', (req, res, next) => {
+  console.log(`[pyrus] ${req.method} ${req.path}`, req.rawBody ? req.rawBody.slice(0, 300) : '');
+  next();
+});
 app.use('/pyrus', pyrusRoutes);
 app.use('/sendpulse', sendpulseRoutes);
 
