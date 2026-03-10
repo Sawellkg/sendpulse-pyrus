@@ -43,16 +43,17 @@ async function validateCredentials(spClientId, spClientSecret) {
 async function sendMessage({ spClientId, spClientSecret, botId, contactId, channel, text }) {
   const token = await getToken(spClientId, spClientSecret);
   const service = channel.toLowerCase(); // 'instagram' or 'telegram'
+  const url = `${BASE}/${service}/contacts/send`;
+  const body = { bot_id: botId, contact_id: contactId, message: { text } };
+  console.log(`[sp/sendMessage] POST ${url}`, JSON.stringify(body));
 
-  await axios.post(
-    `${BASE}/${service}/contacts/sendText`,
-    {
-      bot_id: botId,
-      contact_id: contactId,
-      message: { text },
-    },
-    { headers: { Authorization: `Bearer ${token}` } }
-  );
+  try {
+    const res = await axios.post(url, body, { headers: { Authorization: `Bearer ${token}` } });
+    console.log('[sp/sendMessage] response:', res.status, JSON.stringify(res.data));
+  } catch (err) {
+    console.error('[sp/sendMessage] error:', err.response?.status, JSON.stringify(err.response?.data));
+    throw err;
+  }
 }
 
 module.exports = { validateCredentials, sendMessage };
