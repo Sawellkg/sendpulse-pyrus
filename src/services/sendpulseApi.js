@@ -44,7 +44,11 @@ async function sendMessage({ spClientId, spClientSecret, botId, contactId, chann
   const token = await getToken(spClientId, spClientSecret);
   const service = channel.toLowerCase(); // 'instagram' or 'telegram'
   const url = `${BASE}/${service}/contacts/send`;
-  const body = { bot_id: botId, contact_id: contactId, message: { text } };
+  const body = {
+    bot_id: botId,
+    contact_id: contactId,
+    messages: [{ type: 'text', message: { text } }],
+  };
   console.log(`[sp/sendMessage] POST ${url}`, JSON.stringify(body));
 
   try {
