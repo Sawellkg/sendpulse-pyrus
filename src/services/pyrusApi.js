@@ -51,26 +51,19 @@ async function call(method, path, data) {
 }
 
 /**
- * Create a task in the given Pyrus form.
- * Returns { task_id, ... } from Pyrus response.
+ * Send an incoming message to Pyrus via Extensions API /getmessage.
+ * On first call with a dialog_id, Pyrus creates a task.
+ * On subsequent calls with the same dialog_id, Pyrus adds a comment.
+ * Returns { task_id }.
  */
-async function createTask({ formId, subject, fields }) {
-  return call('post', '/task', {
-    form_id: formId,
-    subject,
-    fields,
-  });
-}
-
-/**
- * Add a comment to an existing Pyrus task.
- * Returns the comment object (including id).
- */
-async function addComment({ taskId, text }) {
-  return call('post', '/comment', {
-    task_id: taskId,
+async function sendIncomingMessage({ dialogId, messageId, title, text, userName }) {
+  return call('post', '/getmessage', {
+    dialog_id: dialogId,
+    message_id: messageId || undefined,
+    title,
     text,
+    user: { name: userName },
   });
 }
 
-module.exports = { createTask, addComment };
+module.exports = { sendIncomingMessage };

@@ -45,14 +45,16 @@ router.post('/authorize', async (req, res) => {
     const spClientId = get('sp_client_id');
     const spClientSecret = get('sp_client_secret');
     const spBotId = get('sp_bot_id');
-    const pyrusFormId = parseInt(get('form_id'), 10);
 
-    console.log('[pyrus/authorize] parsed:', { spClientId: !!spClientId, spClientSecret: !!spClientSecret, spBotId: !!spBotId, pyrusFormId });
+    console.log('[pyrus/authorize] parsed:', { spClientId: !!spClientId, spClientSecret: !!spClientSecret, spBotId: !!spBotId });
 
-    if (!spClientId || !spClientSecret || !spBotId || !pyrusFormId) {
-      console.warn('[pyrus/authorize] missing params');
+    if (!spClientId || !spClientSecret || !spBotId) {
+      console.warn('[pyrus/authorize] missing required params');
       return res.status(200).json({ error: 'bad_credentials' });
     }
+
+    // Use spBotId as account_id if Pyrus didn't send one
+    const resolvedAccountId = accountId || spBotId;
 
     // Validate SendPulse credentials
     try {
@@ -62,7 +64,7 @@ router.post('/authorize', async (req, res) => {
       return res.status(200).json({ error: 'bad_credentials' });
     }
 
-    await db.upsertAccount({ accountId, spClientId, spClientSecret, spBotId, pyrusFormId });
+    await db.upsertAccount({ accountId: resolvedAccountId, spClientId, spClientSecret, spBotId });
     res.json({ status: 'ok' });
   } catch (err) {
     console.error('[pyrus/authorize]', err.message);

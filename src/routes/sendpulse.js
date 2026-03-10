@@ -98,56 +98,30 @@ router.post('/webhook', async (req, res) => {
         await db.saveMessage(mid, messageText);
       }
 
-      // Find or create conversation
+      // Find or create conversation record
       let conversation = await db.getConversation(account.account_id, contact.id);
-
       if (!conversation) {
-        // New contact — create Pyrus task
         conversation = await db.createConversation({
           accountId: account.account_id,
           sendpulseContactId: contact.id,
           sendpulseBotId: bot.id,
           channel,
         });
+      }
 
-        const subject = buildTaskSubject(contact, channel);
-        const fields = buildTaskFields(contact, channel);
+      // Send to Pyrus via Extensions API — same dialog_id creates task on first call, adds comment on subsequent
+      const dialogId = `sp_${account.account_id}_${contact.id}`;
+      const msgRes = await pyrusApi.sendIncomingMessage({
+        dialogId,
+        messageId: mid || undefined,
+        title: buildTaskSubject(contact, channel),
+        text: messageText,
+        userName: contact.name || contact.username || 'Неизвестный',
+      });
 
-        const taskRes = await pyrusApi.createTask({
-          formId: account.pyrus_form_id,
-          subject,
-          fields,
-        });
-
-        const taskId = taskRes?.task?.id || taskRes?.id;
-        if (taskId) {
-          await db.updateConversationTaskId(conversation.id, taskId);
-          conversation.pyrus_task_id = taskId;
-        }
-
-        // First message as a comment
-        if (conversation.pyrus_task_id) {
-          const commentRes = await pyrusApi.addComment({
-            taskId: conversation.pyrus_task_id,
-            text: messageText,
-          });
-          const commentId = commentRes?.comment?.id || commentRes?.id;
-          if (mid && commentId) {
-            await db.updateMessageCommentId(mid, commentId);
-          }
-        }
-      } else {
-        // Existing conversation — add comment
-        if (conversation.pyrus_task_id) {
-          const commentRes = await pyrusApi.addComment({
-            taskId: conversation.pyrus_task_id,
-            text: messageText,
-          });
-          const commentId = commentRes?.comment?.id || commentRes?.id;
-          if (mid && commentId) {
-            await db.updateMessageCommentId(mid, commentId);
-          }
-        }
+      const taskId = msgRes?.task_id;
+      if (taskId && !conversation.pyrus_task_id) {
+        await db.updateConversationTaskId(conversation.id, taskId);
       }
     }
   } catch (err) {
@@ -166,27 +140,5 @@ function buildTaskSubject(contact, channel) {
   return `[${ch}] ${name}${handle}`;
 }
 
-function buildTaskFields(contact, channel) {
-  const fields = [];
-
-  if (contact.name) {
-    fields.push({ code: 'LeadName', value: contact.name });
-  }
-
-  if (contact.username) {
-    fields.push({ code: 'Username', value: `@${contact.username}` });
-  }
-
-  if (channel) {
-    fields.push({ code: 'Channel', value: channel });
-  }
-
-  const phone = contact.variables?.Phone;
-  if (phone) {
-    fields.push({ code: 'PhoneNumber', value: String(phone) });
-  }
-
-  return fields;
-}
 
 module.exports = router;

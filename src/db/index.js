@@ -6,13 +6,17 @@ const config = require('../config');
 const pool = new Pool({ connectionString: config.databaseUrl });
 
 async function initSchema() {
+  // Migration: drop pyrus_form_id column if it exists from old schema
+  await pool.query(`
+    ALTER TABLE accounts DROP COLUMN IF EXISTS pyrus_form_id;
+  `).catch(() => {});
+
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accounts (
       account_id       TEXT PRIMARY KEY,
       sp_client_id     TEXT NOT NULL,
       sp_client_secret TEXT NOT NULL,
       sp_bot_id        TEXT NOT NULL,
-      pyrus_form_id    INTEGER NOT NULL,
       created_at       TIMESTAMPTZ DEFAULT NOW()
     );
 
@@ -38,16 +42,15 @@ async function initSchema() {
 
 // accounts
 
-async function upsertAccount({ accountId, spClientId, spClientSecret, spBotId, pyrusFormId }) {
+async function upsertAccount({ accountId, spClientId, spClientSecret, spBotId }) {
   await pool.query(
-    `INSERT INTO accounts (account_id, sp_client_id, sp_client_secret, sp_bot_id, pyrus_form_id)
-     VALUES ($1, $2, $3, $4, $5)
+    `INSERT INTO accounts (account_id, sp_client_id, sp_client_secret, sp_bot_id)
+     VALUES ($1, $2, $3, $4)
      ON CONFLICT (account_id) DO UPDATE SET
        sp_client_id = EXCLUDED.sp_client_id,
        sp_client_secret = EXCLUDED.sp_client_secret,
-       sp_bot_id = EXCLUDED.sp_bot_id,
-       pyrus_form_id = EXCLUDED.pyrus_form_id`,
-    [accountId, spClientId, spClientSecret, spBotId, pyrusFormId]
+       sp_bot_id = EXCLUDED.sp_bot_id`,
+    [accountId, spClientId, spClientSecret, spBotId]
   );
 }
 
