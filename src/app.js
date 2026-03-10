@@ -24,7 +24,8 @@ app.use((req, res, next) => {
 });
 
 app.use('/pyrus', (req, res, next) => {
-  console.log(`[pyrus] ${req.method} ${req.path}`, req.rawBody ? req.rawBody.slice(0, 300) : '');
+  console.log(`[pyrus] ${req.method} ${req.path} headers:`, JSON.stringify(req.headers));
+  console.log(`[pyrus] ${req.method} ${req.path} body:`, req.rawBody ? req.rawBody.slice(0, 500) : '');
   next();
 });
 app.use('/pyrus', pyrusRoutes);
