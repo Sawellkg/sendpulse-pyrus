@@ -30,7 +30,7 @@ router.get('/pulse', (req, res) => {
 });
 
 // POST /pyrus/authorize — store per-account SendPulse credentials
-router.post('/authorize', verifySignature, async (req, res) => {
+router.post('/authorize', async (req, res) => {
   try {
     const body = req.body;
     const accountId = body.account_id;
