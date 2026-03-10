@@ -4,6 +4,7 @@ const express = require('express');
 const crypto = require('crypto');
 const config = require('../config');
 const db = require('../db');
+const sendpulseApi = require('../services/sendpulseApi');
 
 const router = express.Router();
 
@@ -33,7 +34,6 @@ router.post('/authorize', async (req, res) => {
   try {
     const body = req.body;
     console.log('[pyrus/authorize] body:', JSON.stringify(body));
-    const accountId = body.account_id;
     const credentials = body.credentials || [];
 
     const get = (code) => {
@@ -52,13 +52,11 @@ router.post('/authorize', async (req, res) => {
       return res.status(200).json({ error: 'bad_credentials' });
     }
 
-    // Use spBotId as account_id if Pyrus didn't send one
-    const resolvedAccountId = accountId || spBotId;
+    await db.upsertAccount({ accountId: spBotId, spClientId, spClientSecret, spBotId });
+    console.log('[pyrus/authorize] account saved, id:', spBotId);
 
-    const accessToken = crypto.randomBytes(32).toString('hex');
-    await db.upsertAccount({ accountId: resolvedAccountId, spClientId, spClientSecret, spBotId, accessToken });
-    console.log('[pyrus/authorize] account saved, id:', resolvedAccountId);
-    res.json({ access_token: accessToken, token_type: 'Bearer' });
+    // Pyrus messenger extension expects: account_name + account_id
+    res.json({ account_name: 'SendPulse', account_id: spBotId });
   } catch (err) {
     console.error('[pyrus/authorize]', err.message);
     res.status(500).json({ error: 'internal_error' });
@@ -81,23 +79,26 @@ router.post('/createdialog', verifySignature, (req, res) => {
 });
 
 // POST /pyrus/sendmessage — agent replied in Pyrus → forward to SendPulse
+// Pyrus sends: { account_id, channel_id, message_text, credentials }
 router.post('/sendmessage', verifySignature, async (req, res) => {
   try {
-    const { task_id, text } = req.body;
+    console.log('[pyrus/sendmessage] body:', JSON.stringify(req.body));
+    const { account_id, channel_id, message_text } = req.body;
 
-    if (!task_id || !text) {
-      return res.status(400).json({ error: 'missing_fields' });
-    }
-
-    const conversation = await db.getConversationByTaskId(task_id);
-    if (!conversation) {
-      console.warn(`[pyrus/sendmessage] No conversation for task_id=${task_id}`);
+    if (!account_id || !channel_id || !message_text) {
       return res.json({ status: 'ok' });
     }
 
-    const account = await db.getAccount(conversation.account_id);
+    // account_id = spBotId (what we returned in authorize)
+    const account = await db.getAccountByBotId(account_id);
     if (!account) {
-      console.warn(`[pyrus/sendmessage] No account for account_id=${conversation.account_id}`);
+      console.warn(`[pyrus/sendmessage] No account for account_id=${account_id}`);
+      return res.json({ status: 'ok' });
+    }
+
+    const conversation = await db.getConversation(account.account_id, channel_id);
+    if (!conversation) {
+      console.warn(`[pyrus/sendmessage] No conversation for channel_id=${channel_id}`);
       return res.json({ status: 'ok' });
     }
 
@@ -105,9 +106,9 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
       spClientId: account.sp_client_id,
       spClientSecret: account.sp_client_secret,
       botId: conversation.sendpulse_bot_id,
-      contactId: conversation.sendpulse_contact_id,
+      contactId: channel_id,
       channel: conversation.channel,
-      text,
+      text: message_text,
     });
 
     res.json({ status: 'ok' });

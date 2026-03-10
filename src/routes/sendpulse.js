@@ -110,13 +110,12 @@ router.post('/webhook', async (req, res) => {
       }
 
       // Send to Pyrus via Extensions API — same dialog_id creates task on first call, adds comment on subsequent
-      const dialogId = `sp_${account.account_id}_${contact.id}`;
       const msgRes = await pyrusApi.sendIncomingMessage({
-        dialogId,
+        accountId: account.sp_bot_id,
+        channelId: contact.id,
+        senderName: contact.name || contact.username || 'Неизвестный',
+        messageText,
         messageId: mid || undefined,
-        title: buildTaskSubject(contact, channel),
-        text: messageText,
-        userName: contact.name || contact.username || 'Неизвестный',
       });
 
       const taskId = msgRes?.task_id;
@@ -133,12 +132,6 @@ async function findAccountByBotId(botId) {
   return db.getAccountByBotId(botId);
 }
 
-function buildTaskSubject(contact, channel) {
-  const name = contact.name || contact.username || 'Неизвестный';
-  const handle = contact.username ? ` (@${contact.username})` : '';
-  const ch = channel === 'INSTAGRAM' ? 'Instagram' : channel === 'TELEGRAM' ? 'Telegram' : channel;
-  return `[${ch}] ${name}${handle}`;
-}
 
 
 module.exports = router;
