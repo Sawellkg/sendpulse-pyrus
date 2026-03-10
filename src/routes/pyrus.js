@@ -59,12 +59,20 @@ router.post('/authorize', async (req, res) => {
     // Validate SendPulse credentials
     try {
       await sendpulseApi.validateCredentials(spClientId, spClientSecret);
+      console.log('[pyrus/authorize] SP credentials valid');
     } catch (spErr) {
       console.error('[pyrus/authorize] SP validation failed:', spErr.message);
       return res.status(200).json({ error: 'bad_credentials' });
     }
 
-    await db.upsertAccount({ accountId: resolvedAccountId, spClientId, spClientSecret, spBotId });
+    try {
+      await db.upsertAccount({ accountId: resolvedAccountId, spClientId, spClientSecret, spBotId });
+      console.log('[pyrus/authorize] account saved, id:', resolvedAccountId);
+    } catch (dbErr) {
+      console.error('[pyrus/authorize] DB error:', dbErr.message);
+      return res.status(500).json({ error: 'internal_error' });
+    }
+
     res.json({ status: 'ok' });
   } catch (err) {
     console.error('[pyrus/authorize]', err.message);
