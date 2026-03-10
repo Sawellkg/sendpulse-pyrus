@@ -55,9 +55,10 @@ router.post('/authorize', async (req, res) => {
     // Use spBotId as account_id if Pyrus didn't send one
     const resolvedAccountId = accountId || spBotId;
 
-    await db.upsertAccount({ accountId: resolvedAccountId, spClientId, spClientSecret, spBotId });
+    const accessToken = crypto.randomBytes(32).toString('hex');
+    await db.upsertAccount({ accountId: resolvedAccountId, spClientId, spClientSecret, spBotId, accessToken });
     console.log('[pyrus/authorize] account saved, id:', resolvedAccountId);
-    res.json({ status: 'ok' });
+    res.json({ access_token: accessToken, token_type: 'Bearer' });
   } catch (err) {
     console.error('[pyrus/authorize]', err.message);
     res.status(500).json({ error: 'internal_error' });
