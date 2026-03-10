@@ -33,6 +33,7 @@ router.get('/pulse', (req, res) => {
 router.post('/authorize', async (req, res) => {
   try {
     const body = req.body;
+    console.log('[pyrus/authorize] body:', JSON.stringify(body));
     const accountId = body.account_id;
     const credentials = body.credentials || [];
 
@@ -46,21 +47,19 @@ router.post('/authorize', async (req, res) => {
     const spBotId = get('sp_bot_id');
     const pyrusFormId = parseInt(get('form_id'), 10);
 
+    console.log('[pyrus/authorize] parsed:', { spClientId: !!spClientId, spClientSecret: !!spClientSecret, spBotId: !!spBotId, pyrusFormId });
+
     if (!spClientId || !spClientSecret || !spBotId || !pyrusFormId) {
-      return res.status(400).json({
-        error: 'bad_credentials',
-        message: 'Required parameters: sp_client_id, sp_client_secret, sp_bot_id, form_id',
-      });
+      console.warn('[pyrus/authorize] missing params');
+      return res.status(200).json({ error: 'bad_credentials' });
     }
 
     // Validate SendPulse credentials
     try {
       await sendpulseApi.validateCredentials(spClientId, spClientSecret);
-    } catch {
-      return res.status(400).json({
-        error: 'bad_credentials',
-        message: 'Invalid SendPulse credentials',
-      });
+    } catch (spErr) {
+      console.error('[pyrus/authorize] SP validation failed:', spErr.message);
+      return res.status(200).json({ error: 'bad_credentials' });
     }
 
     await db.upsertAccount({ accountId, spClientId, spClientSecret, spBotId, pyrusFormId });
