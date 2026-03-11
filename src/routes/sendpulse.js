@@ -178,15 +178,17 @@ async function handleOutgoing(event) {
   const sentBy = event.info?.message?.sent_by || null;
 
   // Skip echo: messages we sent via /sendmessage are marked in sentCache
-  if (!sentBy && sentCache.has(contact.id)) return;
+  if (!sentBy && sentCache.has(contact.id)) { console.log('[sp/outgoing] skip echo for', contact.id); return; }
 
   const messageText = extractOutgoingText(channelData);
+  console.log('[sp/outgoing] sentBy:', !!sentBy, 'text:', messageText?.slice(0, 50));
   if (!messageText) return;
 
   const account = await findAccountByBotId(bot.id);
   if (!account) { console.warn('[sp/outgoing] no account for bot_id:', bot.id); return; }
 
   const conversation = await db.getConversation(account.account_id, contact.id);
+  console.log('[sp/outgoing] conversation:', conversation?.id, 'task_id:', conversation?.pyrus_task_id);
   if (!conversation) {
     console.warn('[sp/outgoing] no conversation for contact:', contact.id);
     return;
