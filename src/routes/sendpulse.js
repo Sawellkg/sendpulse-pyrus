@@ -194,15 +194,15 @@ async function handleOutgoing(event) {
     return;
   }
 
-  const senderName = sentBy
-    ? `${sentBy.firstname || ''} ${sentBy.lastname || ''}`.trim() || sentBy.email || 'Оператор'
+  const authorLabel = sentBy
+    ? `${sentBy.firstname || ''} ${sentBy.lastname || ''}`.trim() || sentBy.email || 'Оператор SP'
     : 'Бот';
 
   await pyrusApi.sendIncomingMessage({
     accountId: account.sp_bot_id,
     channelId: contact.id,
-    senderName,
-    messageText: `[→ ${senderName}]: ${messageText}`,
+    senderName: contact.username || contact.name || 'Неизвестный',
+    messageText: `[→ ${authorLabel}]: ${messageText}`,
     messageId: mid || undefined,
   });
 }
