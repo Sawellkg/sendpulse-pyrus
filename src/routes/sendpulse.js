@@ -31,17 +31,18 @@ function extractMessageText(channelData) {
     return [`[Комментарий к посту: ${media.permalink}]`, text].filter(Boolean).join('\n');
   }
 
-  // Reel or media attachment
+  // Reel or media attachments (may be multiple)
   if (attachments.length > 0) {
-    const att = attachments[0];
-    if (att.type === 'ig_reel' && att.payload) {
-      const title = (att.payload.title || '').slice(0, 300);
-      const url = att.payload.url || '';
-      return [`[Reel]`, title, url].filter(Boolean).join('\n');
-    }
-    // Generic attachment with URL
-    const url = att.payload?.url || '';
-    return [`[Медиа]`, url].filter(Boolean).join('\n');
+    const parts = attachments.map(att => {
+      if (att.type === 'ig_reel' && att.payload) {
+        const title = (att.payload.title || '').slice(0, 300);
+        const url = att.payload.url || '';
+        return ['[Reel]', title, url].filter(Boolean).join('\n');
+      }
+      const url = att.payload?.url || '';
+      return ['[Медиа]', url].filter(Boolean).join('\n');
+    });
+    return parts.join('\n');
   }
 
   // Plain text
