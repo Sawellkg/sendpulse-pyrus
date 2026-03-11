@@ -100,6 +100,7 @@ router.post('/webhook', async (req, res) => {
 
       // Find or create conversation record
       let conversation = await db.getConversation(account.account_id, contact.id);
+      const isFirstMessage = !conversation || !conversation.pyrus_task_id;
       if (!conversation) {
         conversation = await db.createConversation({
           accountId: account.account_id,
@@ -109,13 +110,22 @@ router.post('/webhook', async (req, res) => {
         });
       }
 
-      // Send to Pyrus via Extensions API — same dialog_id creates task on first call, adds comment on subsequent
+      // Build mappings only for first message (task creation)
+      const mappings = isFirstMessage ? [
+        { code: 'SenderName', value: (contact.name || '').slice(0, 300) },
+        { code: 'Subject', value: messageText.slice(0, 300) },
+        { code: 'accauntName', value: (contact.username || '').slice(0, 300) },
+        { code: 'SenderAccountUrl', value: contact.username ? `https://instagram.com/${contact.username}` : '' },
+      ].filter(m => m.value) : undefined;
+
+      // Send to Pyrus via Extensions API — same channel_id creates task on first call, adds comment on subsequent
       const msgRes = await pyrusApi.sendIncomingMessage({
         accountId: account.sp_bot_id,
         channelId: contact.id,
         senderName: contact.username || contact.name || 'Неизвестный',
         messageText,
         messageId: mid || undefined,
+        mappings,
       });
 
       const taskId = msgRes?.task_id;

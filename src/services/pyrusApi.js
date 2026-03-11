@@ -56,14 +56,16 @@ async function call(method, path, data) {
  * On subsequent calls with the same dialog_id, Pyrus adds a comment.
  * Returns { task_id }.
  */
-async function sendIncomingMessage({ accountId, channelId, senderName, messageText, messageId }) {
-  return call('post', '/getmessage', {
+async function sendIncomingMessage({ accountId, channelId, senderName, messageText, messageId, mappings }) {
+  const body = {
     account_id: accountId,
     channel_id: channelId,
     sender_name: senderName,
     message_text: messageText,
-    message_id: messageId || undefined,
-  });
+  };
+  if (messageId) body.message_id = messageId;
+  if (mappings)  body.mappings = mappings;
+  return call('post', '/getmessage', body);
 }
 
 module.exports = { sendIncomingMessage };
