@@ -54,6 +54,26 @@ function formatReply(originalText, replyText) {
   return `${originalText}\n\n${replyText}`;
 }
 
+/**
+ * Extract text from an outgoing bot/operator message.
+ */
+function extractOutgoingText(channelData) {
+  const wrapper = channelData.message || {};
+  const inner = wrapper.message || {};
+  const type = wrapper.type || 'text';
+
+  if (type === 'text') {
+    return inner.text || '';
+  }
+
+  if (type === 'text_template') {
+    const elements = inner.attachment?.payload?.elements || [];
+    return elements.map(el => el.title || '').filter(Boolean).join('\n');
+  }
+
+  return '';
+}
+
 // POST /sendpulse/webhook
 router.post('/webhook', async (req, res) => {
   // Always respond 200 immediately so SendPulse doesn't retry
@@ -63,6 +83,10 @@ router.post('/webhook', async (req, res) => {
     const events = Array.isArray(req.body) ? req.body : [req.body];
 
     for (const event of events) {
+      if (event.title === 'outgoing_message') {
+        await handleOutgoing(event);
+        continue;
+      }
       if (event.title !== 'incoming_message') continue;
 
       const contact = event.contact || {};
@@ -144,6 +168,35 @@ router.post('/webhook', async (req, res) => {
     console.error('[sp/webhook]', err.message);
   }
 });
+
+async function handleOutgoing(event) {
+  const contact = event.contact || {};
+  const bot = event.bot || {};
+  const channelData = event.info?.message?.channel_data || {};
+  const mid = channelData.message_id || null;
+  const sentBy = event.info?.message?.sent_by || null;
+
+  const messageText = extractOutgoingText(channelData);
+  if (!messageText) return;
+
+  const account = await findAccountByBotId(bot.id);
+  if (!account) return;
+
+  const conversation = await db.getConversation(account.account_id, contact.id);
+  if (!conversation || !conversation.pyrus_task_id) return;
+
+  const senderName = sentBy
+    ? `${sentBy.firstname || ''} ${sentBy.lastname || ''}`.trim() || sentBy.email || 'Оператор'
+    : 'Бот';
+
+  await pyrusApi.sendIncomingMessage({
+    accountId: account.sp_bot_id,
+    channelId: contact.id,
+    senderName,
+    messageText: `[→ ${senderName}]: ${messageText}`,
+    messageId: mid || undefined,
+  });
+}
 
 async function findAccountByBotId(botId) {
   return db.getAccountByBotId(botId);
