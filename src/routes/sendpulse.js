@@ -113,7 +113,7 @@ router.post('/webhook', async (req, res) => {
       const msgRes = await pyrusApi.sendIncomingMessage({
         accountId: account.sp_bot_id,
         channelId: contact.id,
-        senderName: contact.name || contact.username || 'Неизвестный',
+        senderName: contact.username || contact.name || 'Неизвестный',
         messageText,
         messageId: mid || undefined,
       });
