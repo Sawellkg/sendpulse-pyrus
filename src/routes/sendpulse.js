@@ -176,9 +176,11 @@ async function handleOutgoing(event) {
   const mid = channelData.message_id || null;
   const sentBy = event.info?.message?.sent_by || null;
 
-  console.log('[sp/outgoing] channelData:', JSON.stringify(channelData));
+  // Only forward messages sent by a human operator in SendPulse.
+  // Bot auto-replies and messages sent via our /sendmessage API have no sent_by.
+  if (!sentBy) return;
+
   const messageText = extractOutgoingText(channelData);
-  console.log('[sp/outgoing] extracted text:', messageText);
   if (!messageText) return;
 
   const account = await findAccountByBotId(bot.id);
