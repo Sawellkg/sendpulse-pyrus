@@ -119,7 +119,8 @@ router.post('/webhook', async (req, res) => {
         { code: 'Subject', value: messageText.slice(0, 300) },
         { code: 'accauntName', value: (contact.username || '').slice(0, 300) },
         { code: 'SenderAccountUrl', value: contact.username ? `https://instagram.com/${contact.username}` : '' },
-        // { code: 'MessageType', value: { choice_ids: [isPostComment ? 2 : 1] } },
+        { code: 'MessageType', value: isPostComment ? 'Комментарий' : 'Direct' },
+        //  { code: 'MessageType', value: { choice_ids: [isPostComment ? 2 : 1] } },
         { code: 'PostUrl', value: isPostComment ? (channelData.media.permalink || '') : '' },
       ].filter(m => m.value) : undefined;
 
