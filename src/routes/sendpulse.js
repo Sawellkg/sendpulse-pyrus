@@ -115,12 +115,12 @@ router.post('/webhook', async (req, res) => {
 
       // Build mappings only for first message (task creation)
       const mappings = isFirstMessage ? [
-        { code: 'SenderName',      value: (contact.name || '').slice(0, 300) },
-        { code: 'Subject',         value: messageText.slice(0, 300) },
-        { code: 'accauntName',     value: (contact.username || '').slice(0, 300) },
+        { code: 'SenderName', value: (contact.name || '').slice(0, 300) },
+        { code: 'Subject', value: messageText.slice(0, 300) },
+        { code: 'accauntName', value: (contact.username || '').slice(0, 300) },
         { code: 'SenderAccountUrl', value: contact.username ? `https://instagram.com/${contact.username}` : '' },
-        { code: 'MessageType',     value: { choice_id: isPostComment ? 2 : 1 } },
-        { code: 'PostUrl',         value: isPostComment ? (channelData.media.permalink || '') : '' },
+        { code: 'MessageType', value: { choice_id: isPostComment ? 2 : 1 } },
+        { code: 'PostUrl', value: isPostComment ? (channelData.media.permalink || '') : '' },
       ].filter(m => m.value) : undefined;
 
       // Send to Pyrus via Extensions API — same channel_id creates task on first call, adds comment on subsequent
