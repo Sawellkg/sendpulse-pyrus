@@ -84,7 +84,7 @@ router.post('/webhook', async (req, res) => {
     const events = Array.isArray(req.body) ? req.body : [req.body];
 
     for (const event of events) {
-      console.log('[sp/webhook] event:', JSON.stringify(event));
+      //console.log('[sp/webhook] event:', JSON.stringify(event));
       if (event.title === 'outgoing_message') {
         await handleOutgoing(event);
         continue;
