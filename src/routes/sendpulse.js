@@ -124,7 +124,7 @@ router.post('/webhook', async (req, res) => {
 
       // Find or create conversation record
       let conversation = await db.getConversation(account.account_id, contact.id);
-      const isFirstMessage = !conversation || !conversation.pyrus_task_id;
+      const isFirstMessage = !conversation;
       if (!conversation) {
         conversation = await db.createConversation({
           accountId: account.account_id,
@@ -149,7 +149,7 @@ router.post('/webhook', async (req, res) => {
       ].filter(m => m.value) : undefined;
 
       // Send to Pyrus via Extensions API — same channel_id creates task on first call, adds comment on subsequent
-      const msgRes = await pyrusApi.sendIncomingMessage({
+      await pyrusApi.sendIncomingMessage({
         accountId: account.sp_bot_id,
         channelId: contact.id,
         senderName: contact.username || contact.name || 'Неизвестный',
@@ -159,10 +159,6 @@ router.post('/webhook', async (req, res) => {
         mappings,
       });
 
-      const taskId = msgRes?.task_id;
-      if (taskId && !conversation.pyrus_task_id) {
-        await db.updateConversationTaskId(conversation.id, taskId);
-      }
     }
   } catch (err) {
     console.error('[sp/webhook]', err.message);
