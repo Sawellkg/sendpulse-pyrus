@@ -182,10 +182,13 @@ async function handleOutgoing(event) {
   if (!messageText) return;
 
   const account = await findAccountByBotId(bot.id);
-  if (!account) return;
+  if (!account) { console.warn('[sp/outgoing] no account for bot_id:', bot.id); return; }
 
   const conversation = await db.getConversation(account.account_id, contact.id);
-  if (!conversation || !conversation.pyrus_task_id) return;
+  if (!conversation || !conversation.pyrus_task_id) {
+    console.warn('[sp/outgoing] no conversation/task for contact:', contact.id, 'task_id:', conversation?.pyrus_task_id);
+    return;
+  }
 
   const senderName = sentBy
     ? `${sentBy.firstname || ''} ${sentBy.lastname || ''}`.trim() || sentBy.email || 'Оператор'
