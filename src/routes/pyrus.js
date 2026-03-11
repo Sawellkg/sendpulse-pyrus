@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const config = require('../config');
 const db = require('../db');
 const sendpulseApi = require('../services/sendpulseApi');
+const sentCache = require('../sentCache');
 
 const router = express.Router();
 
@@ -111,6 +112,7 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
       text: message_text,
     });
 
+    sentCache.mark(channel_id);
     res.json({ status: 'ok' });
   } catch (err) {
     console.error('[pyrus/sendmessage]', err.message);

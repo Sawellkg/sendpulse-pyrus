@@ -3,6 +3,7 @@
 const express = require('express');
 const db = require('../db');
 const pyrusApi = require('../services/pyrusApi');
+const sentCache = require('../sentCache');
 
 const router = express.Router();
 
@@ -176,9 +177,8 @@ async function handleOutgoing(event) {
   const mid = channelData.message_id || null;
   const sentBy = event.info?.message?.sent_by || null;
 
-  // Only forward messages sent by a human operator in SendPulse.
-  // Bot auto-replies and messages sent via our /sendmessage API have no sent_by.
-  if (!sentBy) return;
+  // Skip echo: messages we sent via /sendmessage are marked in sentCache
+  if (!sentBy && sentCache.has(contact.id)) return;
 
   const messageText = extractOutgoingText(channelData);
   if (!messageText) return;
