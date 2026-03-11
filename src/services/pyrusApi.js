@@ -46,6 +46,7 @@ async function call(method, path, data) {
       });
       return res.data;
     }
+    console.error(`[pyrusApi] ${method.toUpperCase()} ${path} error:`, err.response?.status, JSON.stringify(err.response?.data));
     throw err;
   }
 }
