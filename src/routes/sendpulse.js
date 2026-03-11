@@ -176,7 +176,9 @@ async function handleOutgoing(event) {
   const mid = channelData.message_id || null;
   const sentBy = event.info?.message?.sent_by || null;
 
+  console.log('[sp/outgoing] channelData:', JSON.stringify(channelData));
   const messageText = extractOutgoingText(channelData);
+  console.log('[sp/outgoing] extracted text:', messageText);
   if (!messageText) return;
 
   const account = await findAccountByBotId(bot.id);
