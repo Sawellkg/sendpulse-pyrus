@@ -185,8 +185,8 @@ async function handleOutgoing(event) {
   if (!account) { console.warn('[sp/outgoing] no account for bot_id:', bot.id); return; }
 
   const conversation = await db.getConversation(account.account_id, contact.id);
-  if (!conversation || !conversation.pyrus_task_id) {
-    console.warn('[sp/outgoing] no conversation/task for contact:', contact.id, 'task_id:', conversation?.pyrus_task_id);
+  if (!conversation) {
+    console.warn('[sp/outgoing] no conversation for contact:', contact.id);
     return;
   }
 
