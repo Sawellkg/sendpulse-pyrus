@@ -5,6 +5,8 @@ const crypto = require('crypto');
 const config = require('../config');
 const db = require('../db');
 const sendpulseApi = require('../services/sendpulseApi');
+const pyrusApi = require('../services/pyrusApi');
+const tempStore = require('../tempStore');
 const sentCache = require('../sentCache');
 
 const router = express.Router();
@@ -80,17 +82,18 @@ router.post('/createdialog', verifySignature, (req, res) => {
 });
 
 // POST /pyrus/sendmessage — agent replied in Pyrus → forward to SendPulse
-// Pyrus sends: { account_id, channel_id, message_text, credentials }
+// Pyrus sends: { account_id, channel_id, message_text, attachment_ids, credentials }
 router.post('/sendmessage', verifySignature, async (req, res) => {
   try {
     console.log('[pyrus/sendmessage] body:', JSON.stringify(req.body));
-    const { account_id, channel_id, message_text } = req.body;
+    const { account_id, channel_id, message_text, attachment_ids } = req.body;
+    const hasText = message_text && message_text.trim();
+    const hasAttachments = Array.isArray(attachment_ids) && attachment_ids.length > 0;
 
-    if (!account_id || !channel_id || !message_text) {
+    if (!account_id || !channel_id || (!hasText && !hasAttachments)) {
       return res.json({ status: 'ok' });
     }
 
-    // account_id = spBotId (what we returned in authorize)
     const account = await db.getAccountByBotId(account_id);
     if (!account) {
       console.warn(`[pyrus/sendmessage] No account for account_id=${account_id}`);
@@ -103,14 +106,34 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
       return res.json({ status: 'ok' });
     }
 
-    await sendpulseApi.sendMessage({
+    const spParams = {
       spClientId: account.sp_client_id,
       spClientSecret: account.sp_client_secret,
       botId: conversation.sendpulse_bot_id,
       contactId: channel_id,
       channel: conversation.channel,
-      text: message_text,
-    });
+    };
+
+    // Send text message
+    if (hasText) {
+      await sendpulseApi.sendMessage({ ...spParams, text: message_text });
+    }
+
+    // Send attachments
+    if (hasAttachments) {
+      const { serviceUrl } = require('../config');
+      for (const fileId of attachment_ids) {
+        try {
+          const { buffer, contentType, fileName } = await pyrusApi.downloadFile(fileId);
+          const uuid = tempStore.put(buffer, contentType, fileName);
+          const publicUrl = `${serviceUrl}/temp/${uuid}`;
+          console.log(`[pyrus/sendmessage] serving attachment ${fileId} as ${publicUrl}`);
+          await sendpulseApi.sendMedia({ ...spParams, url: publicUrl, contentType });
+        } catch (attErr) {
+          console.error(`[pyrus/sendmessage] attachment ${fileId} failed:`, attErr.message);
+        }
+      }
+    }
 
     sentCache.mark(channel_id);
     res.json({ status: 'ok' });

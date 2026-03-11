@@ -3,6 +3,7 @@
 const express = require('express');
 const config = require('./config');
 const db = require('./db');
+const tempStore = require('./tempStore');
 const pyrusRoutes = require('./routes/pyrus');
 const sendpulseRoutes = require('./routes/sendpulse');
 
@@ -32,6 +33,16 @@ app.use('/pyrus', pyrusRoutes);
 app.use('/sendpulse', sendpulseRoutes);
 
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+
+// Serve temporary files (used for forwarding Pyrus attachments to SendPulse)
+app.get('/temp/:uuid', (req, res) => {
+  const entry = tempStore.get(req.params.uuid);
+  if (!entry) return res.status(404).end();
+  res.setHeader('Content-Type', entry.contentType);
+  res.setHeader('Content-Disposition', `inline; filename="${entry.fileName}"`);
+  res.send(entry.buffer);
+  tempStore.remove(req.params.uuid);
+});
 
 async function start() {
   await db.initSchema();

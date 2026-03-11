@@ -60,4 +60,41 @@ async function sendMessage({ spClientId, spClientSecret, botId, contactId, chann
   }
 }
 
-module.exports = { validateCredentials, sendMessage };
+/**
+ * Send a media message (image/video/file) to a SendPulse contact via a public URL.
+ */
+async function sendMedia({ spClientId, spClientSecret, botId, contactId, channel, url, contentType }) {
+  const token = await getToken(spClientId, spClientSecret);
+  const service = channel.toLowerCase();
+
+  let msgType = 'image';
+  if (contentType.startsWith('video/')) msgType = 'video';
+  else if (!contentType.startsWith('image/')) msgType = 'file';
+
+  const body = {
+    bot_id: botId,
+    contact_id: contactId,
+    messages: [{
+      type: msgType,
+      message: {
+        attachment: {
+          type: msgType,
+          payload: { is_external_attachment: true, url },
+        },
+      },
+    }],
+  };
+
+  console.log(`[sp/sendMedia] POST ${BASE}/${service}/contacts/send`, JSON.stringify({ ...body, messages: `[${msgType}]` }));
+  try {
+    const res = await axios.post(`${BASE}/${service}/contacts/send`, body, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    console.log('[sp/sendMedia] response:', res.status, JSON.stringify(res.data));
+  } catch (err) {
+    console.error('[sp/sendMedia] error:', err.response?.status, JSON.stringify(err.response?.data));
+    throw err;
+  }
+}
+
+module.exports = { validateCredentials, sendMessage, sendMedia };

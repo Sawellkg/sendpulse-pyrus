@@ -93,4 +93,23 @@ async function uploadFile(filePath, fileName) {
   }
 }
 
-module.exports = { sendIncomingMessage, uploadFile };
+/**
+ * Download a file from Pyrus by its numeric attachment ID.
+ * Returns { buffer, contentType, fileName }.
+ */
+async function downloadFile(fileId) {
+  const token = await getToken();
+  const res = await axios.get(`${BASE}/files/download/${fileId}`, {
+    headers: { Authorization: `Bearer ${token}` },
+    responseType: 'arraybuffer',
+    timeout: 60_000,
+  });
+  const contentType = res.headers['content-type'] || 'application/octet-stream';
+  const disposition = res.headers['content-disposition'] || '';
+  const nameMatch = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\r\n]+)/i);
+  const ext = contentType.split('/')[1]?.split(';')[0] || 'bin';
+  const fileName = nameMatch ? decodeURIComponent(nameMatch[1].trim()) : `file_${fileId}.${ext}`;
+  return { buffer: Buffer.from(res.data), contentType, fileName };
+}
+
+module.exports = { sendIncomingMessage, uploadFile, downloadFile };

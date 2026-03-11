@@ -2,6 +2,7 @@
 
 module.exports = {
   port: process.env.PORT || 3000,
+  serviceUrl: process.env.SERVICE_URL || 'http://localhost:3000',
   databaseUrl: process.env.DATABASE_URL,
   pyrus: {
     clientId: process.env.PYRUS_CLIENT_ID,
