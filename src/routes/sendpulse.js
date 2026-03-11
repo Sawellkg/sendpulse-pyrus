@@ -1,5 +1,9 @@
 'use strict';
 
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const axios = require('axios');
 const express = require('express');
 const db = require('../db');
 const pyrusApi = require('../services/pyrusApi');
@@ -31,18 +35,12 @@ function extractMessageText(channelData) {
     return [`[Комментарий к посту: ${media.permalink}]`, text].filter(Boolean).join('\n');
   }
 
-  // Reel or media attachments (may be multiple)
+  // Reel or media attachments — files uploaded separately, URLs omitted here
   if (attachments.length > 0) {
-    const parts = attachments.map(att => {
-      if (att.type === 'ig_reel' && att.payload) {
-        const title = (att.payload.title || '').slice(0, 300);
-        const url = att.payload.url || '';
-        return ['[Reel]', title, url].filter(Boolean).join('\n');
-      }
-      const url = att.payload?.url || '';
-      return ['[Медиа]', url].filter(Boolean).join('\n');
-    });
-    return parts.join('\n');
+    const labels = attachments
+      .filter(att => att.type === 'ig_reel' && att.payload?.title)
+      .map(att => `[Reel] ${att.payload.title.slice(0, 300)}`);
+    return [msg.text, ...labels].filter(Boolean).join('\n') || '[Медиа]';
   }
 
   // Plain text
@@ -76,6 +74,45 @@ function extractOutgoingText(channelData) {
   return '';
 }
 
+/**
+ * Download attachments from SendPulse URLs, upload to Pyrus, return guids.
+ * Temp files are deleted after upload regardless of outcome.
+ */
+async function downloadAndUploadAttachments(attachments) {
+  const guids = [];
+  const tempFiles = [];
+
+  for (const att of attachments) {
+    const url = att.payload?.url;
+    if (!url) continue;
+    let filePath;
+    try {
+      const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 30_000 });
+      const contentType = res.headers['content-type'] || '';
+      const ext = contentType.includes('video') ? 'mp4'
+        : contentType.includes('png') ? 'png'
+        : contentType.includes('gif') ? 'gif'
+        : 'jpg';
+      const fileName = `${att.type}_${Date.now()}_${guids.length}.${ext}`;
+      filePath = path.join(os.tmpdir(), fileName);
+      fs.writeFileSync(filePath, Buffer.from(res.data));
+      tempFiles.push(filePath);
+
+      const guid = await pyrusApi.uploadFile(filePath, fileName);
+      guids.push(guid);
+      console.log(`[sp/attachments] uploaded ${att.type} → guid ${guid}`);
+    } catch (err) {
+      console.error('[sp/attachments] error:', err.message);
+    }
+  }
+
+  for (const f of tempFiles) {
+    try { fs.unlinkSync(f); } catch {}
+  }
+
+  return guids;
+}
+
 // POST /sendpulse/webhook
 router.post('/webhook', async (req, res) => {
   // Always respond 200 immediately so SendPulse doesn't retry
@@ -107,7 +144,13 @@ router.post('/webhook', async (req, res) => {
         continue;
       }
 
-      // Extract message text
+      // Upload attachments to Pyrus and collect guids
+      const rawAttachments = msg.attachments || [];
+      const attachmentGuids = rawAttachments.length > 0
+        ? await downloadAndUploadAttachments(rawAttachments)
+        : [];
+
+      // Extract message text (URLs excluded when files are uploaded)
       let messageText = extractMessageText(channelData);
 
       // Handle reply_to: prepend quoted original message
@@ -118,7 +161,7 @@ router.post('/webhook', async (req, res) => {
         }
       }
 
-      if (!messageText) continue;
+      if (!messageText && !attachmentGuids.length) continue;
 
       // Save current message to messages table
       if (mid) {
@@ -156,10 +199,11 @@ router.post('/webhook', async (req, res) => {
         accountId: account.sp_bot_id,
         channelId: contact.id,
         senderName: contact.username || contact.name || 'Неизвестный',
-        messageText,
+        messageText: messageText || ' ',
         messageId: mid || undefined,
         messageType: isPostComment ? 'post_comment' : 'direct',
         mappings,
+        attachments: attachmentGuids.length ? attachmentGuids : undefined,
       });
 
       const taskId = msgRes?.task_id;
