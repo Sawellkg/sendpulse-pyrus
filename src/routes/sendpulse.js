@@ -271,8 +271,7 @@ router.post('/webhook', async (req, res) => {
 
       // Find or create conversation record
       let conversation = await db.getConversation(account.account_id, contact.id);
-      //const isFirstMessage = !conversation || !conversation.pyrus_task_id;
-      const isFirstMessage = !conversation;
+      const isFirstMessage = !conversation || !conversation.pyrus_task_id;
       if (!conversation) {
         conversation = await db.createConversation({
           accountId: account.account_id,
@@ -315,7 +314,7 @@ router.post('/webhook', async (req, res) => {
         attachments: attachmentGuids.length ? attachmentGuids : undefined,
       });
 
-      const taskId = msgRes?.task_id;
+      const taskId = msgRes?.tasks?.[0]?.task_id;
       if (taskId && !conversation.pyrus_task_id) {
         await db.updateConversationTaskId(conversation.id, taskId);
       }
