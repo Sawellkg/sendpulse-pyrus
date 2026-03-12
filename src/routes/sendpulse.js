@@ -163,11 +163,6 @@ router.post('/webhook', async (req, res) => {
 
       if (!messageText && !attachmentGuids.length) continue;
 
-      // Save current message to messages table
-      if (mid) {
-        await db.saveMessage(mid, messageText);
-      }
-
       // Find or create conversation record
       let conversation = await db.getConversation(account.account_id, contact.id);
       const isFirstMessage = !conversation || !conversation.pyrus_task_id;
@@ -178,6 +173,11 @@ router.post('/webhook', async (req, res) => {
           sendpulseBotId: bot.id,
           channel,
         });
+      }
+
+      // Save message with conversation_id and full payload
+      if (mid) {
+        await db.saveMessage(mid, messageText, 'incoming', conversation.id, event);
       }
 
       // Detect message type
@@ -239,9 +239,9 @@ async function handleOutgoing(event) {
     return;
   }
 
-  // Always save to DB
+  // Always save to DB with full payload
   if (mid) {
-    await db.saveMessage(mid, messageText, 'outgoing', conversation.id);
+    await db.saveMessage(mid, messageText, 'outgoing', conversation.id, event);
   }
 
   // Don't forward echo back to Pyrus

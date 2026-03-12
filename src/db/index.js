@@ -11,6 +11,7 @@ async function initSchema() {
   await pool.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS access_token TEXT;`).catch(() => {});
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS direction TEXT DEFAULT 'incoming';`).catch(() => {});
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS conversation_id INTEGER REFERENCES conversations(id);`).catch(() => {});
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS payload JSONB;`).catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accounts (
@@ -100,11 +101,11 @@ async function updateConversationTaskId(id, pyrusTaskId) {
 
 // messages
 
-async function saveMessage(mid, text, direction = 'incoming', conversationId = null) {
+async function saveMessage(mid, text, direction = 'incoming', conversationId = null, payload = null) {
   await pool.query(
-    `INSERT INTO messages (mid, text, direction, conversation_id)
-     VALUES ($1, $2, $3, $4) ON CONFLICT (mid) DO NOTHING`,
-    [mid, text || '', direction, conversationId]
+    `INSERT INTO messages (mid, text, direction, conversation_id, payload)
+     VALUES ($1, $2, $3, $4, $5) ON CONFLICT (mid) DO NOTHING`,
+    [mid, text || '', direction, conversationId, payload ? JSON.stringify(payload) : null]
   );
 }
 
