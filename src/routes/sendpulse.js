@@ -66,7 +66,8 @@ function extractChatItemContent(item) {
   const data = item.data || {};
 
   if (type === 'text') {
-    return { text: data.message?.text || '', attachments: [] };
+    // Outgoing: data.message.text; Incoming in history: data.text
+    return { text: data.message?.text || data.text || '', attachments: [] };
   }
 
   // 'attachments' — incoming message with only attachments (no text)
