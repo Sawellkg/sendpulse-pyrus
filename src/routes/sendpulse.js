@@ -154,12 +154,13 @@ router.post('/webhook', async (req, res) => {
       let messageText = extractMessageText(channelData);
 
       // Handle reply_to: prepend quoted original message
-      if (msg.reply_to && msg.reply_to.mid) {
-        const original = await db.getMessage(msg.reply_to.mid);
-        if (original) {
-          messageText = formatReply(original.text, messageText);
-        }
-      }
+      // TODO: rewrite reply handling
+      // if (msg.reply_to && msg.reply_to.mid) {
+      //   const original = await db.getMessage(msg.reply_to.mid);
+      //   if (original) {
+      //     messageText = formatReply(original.text, messageText);
+      //   }
+      // }
 
       if (!messageText && !attachmentGuids.length) continue;
 
@@ -175,11 +176,11 @@ router.post('/webhook', async (req, res) => {
         });
       }
 
-      // Save message with conversation_id, full payload and raw attachments
-      if (mid) {
-        const rawAttachmentsForDb = rawAttachments.length > 0 ? rawAttachments : null;
-        await db.saveMessage(mid, messageText, 'incoming', conversation.id, event, rawAttachmentsForDb);
-      }
+      // TODO: save message
+      // if (mid) {
+      //   const rawAttachmentsForDb = rawAttachments.length > 0 ? rawAttachments : null;
+      //   await db.saveMessage(mid, messageText, 'incoming', conversation.id, event, rawAttachmentsForDb);
+      // }
 
       // Detect message type
       const isPostComment = !!(channelData.media && channelData.media.permalink);
@@ -240,11 +241,11 @@ async function handleOutgoing(event) {
     return;
   }
 
-  // Always save to DB with full payload and raw attachments
-  if (mid) {
-    const outAttachments = channelData.message?.attachments?.length > 0 ? channelData.message.attachments : null;
-    await db.saveMessage(mid, messageText, 'outgoing', conversation.id, event, outAttachments);
-  }
+  // TODO: save message
+  // if (mid) {
+  //   const outAttachments = channelData.message?.attachments?.length > 0 ? channelData.message.attachments : null;
+  //   await db.saveMessage(mid, messageText, 'outgoing', conversation.id, event, outAttachments);
+  // }
 
   // Don't forward echo back to Pyrus
   if (isEcho) return;
