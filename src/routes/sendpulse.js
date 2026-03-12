@@ -113,8 +113,43 @@ function extractOutgoingText(channelData) {
   return '';
 }
 
+const { serviceUrl } = require('../config');
+const tempStore = require('../tempStore');
+
 /**
- * Download attachments from SendPulse URLs, upload to Pyrus, return guids.
+ * Resolve an attachment URL to { buffer, contentType, fileName }.
+ * If the URL points to our own /temp endpoint, re-downloads from Pyrus using stored file_ref.
+ */
+async function resolveAttachmentBuffer(att) {
+  const url = att.payload?.url || '';
+  const tempPrefix = `${serviceUrl}/temp/`;
+
+  if (url.startsWith(tempPrefix)) {
+    const uuid = url.slice(tempPrefix.length);
+    // Try in-memory store first
+    const stored = tempStore.get ? tempStore.get(uuid) : null;
+    if (stored) return stored;
+    // Look up DB and re-download from Pyrus
+    const ref = await db.getFileRef(uuid);
+    if (ref) {
+      console.log(`[sp/attachments] re-downloading pyrus file ${ref.pyrus_file_id} for uuid ${uuid}`);
+      return await pyrusApi.downloadFile(ref.pyrus_file_id);
+    }
+    throw new Error(`temp file ${uuid} expired and no file_ref found`);
+  }
+
+  // Regular external URL
+  const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 30_000 });
+  const contentType = res.headers['content-type'] || 'application/octet-stream';
+  const ext = contentType.includes('video') ? 'mp4'
+    : contentType.includes('png') ? 'png'
+      : contentType.includes('gif') ? 'gif'
+        : 'jpg';
+  return { buffer: Buffer.from(res.data), contentType, fileName: `${att.type || 'file'}.${ext}` };
+}
+
+/**
+ * Download attachments, upload to Pyrus, return guids.
  * Temp files are deleted after upload regardless of outcome.
  */
 async function downloadAndUploadAttachments(attachments) {
@@ -122,22 +157,17 @@ async function downloadAndUploadAttachments(attachments) {
   const tempFiles = [];
 
   for (const att of attachments) {
-    const url = att.payload?.url;
-    if (!url) continue;
+    if (!att.payload?.url) continue;
     let filePath;
     try {
-      const res = await axios.get(url, { responseType: 'arraybuffer', timeout: 30_000 });
-      const contentType = res.headers['content-type'] || '';
-      const ext = contentType.includes('video') ? 'mp4'
-        : contentType.includes('png') ? 'png'
-          : contentType.includes('gif') ? 'gif'
-            : 'jpg';
-      const fileName = `${att.type}_${Date.now()}_${guids.length}.${ext}`;
-      filePath = path.join(os.tmpdir(), fileName);
-      fs.writeFileSync(filePath, Buffer.from(res.data));
+      const { buffer, contentType, fileName } = await resolveAttachmentBuffer(att);
+      const ext = fileName.split('.').pop() || 'bin';
+      const tmpName = `${att.type}_${Date.now()}_${guids.length}.${ext}`;
+      filePath = path.join(os.tmpdir(), tmpName);
+      fs.writeFileSync(filePath, buffer);
       tempFiles.push(filePath);
 
-      const guid = await pyrusApi.uploadFile(filePath, fileName);
+      const guid = await pyrusApi.uploadFile(filePath, fileName || tmpName);
       guids.push(guid);
       console.log(`[sp/attachments] uploaded ${att.type} → guid ${guid}`);
     } catch (err) {

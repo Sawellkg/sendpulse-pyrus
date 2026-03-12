@@ -126,6 +126,7 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
         try {
           const { buffer, contentType, fileName } = await pyrusApi.downloadFile(fileId);
           const uuid = tempStore.put(buffer, contentType, fileName);
+          await db.saveFileRef(uuid, fileId, contentType, fileName);
           const publicUrl = `${serviceUrl}/temp/${uuid}`;
           console.log(`[pyrus/sendmessage] serving attachment ${fileId} as ${publicUrl}`);
           await sendpulseApi.sendMedia({ ...spParams, url: publicUrl, contentType });

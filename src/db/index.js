@@ -41,6 +41,14 @@ async function initSchema() {
       pyrus_comment_id INTEGER,
       created_at       TIMESTAMPTZ DEFAULT NOW()
     );
+
+    CREATE TABLE IF NOT EXISTS file_refs (
+      uuid             TEXT PRIMARY KEY,
+      pyrus_file_id    INTEGER NOT NULL,
+      content_type     TEXT NOT NULL,
+      file_name        TEXT NOT NULL,
+      created_at       TIMESTAMPTZ DEFAULT NOW()
+    );
   `);
 }
 
@@ -121,6 +129,21 @@ async function updateMessageCommentId(mid, pyrusCommentId) {
   await pool.query('UPDATE messages SET pyrus_comment_id = $1 WHERE mid = $2', [pyrusCommentId, mid]);
 }
 
+// file_refs — maps temp UUID to Pyrus file ID for re-download
+
+async function saveFileRef(uuid, pyrusFileId, contentType, fileName) {
+  await pool.query(
+    `INSERT INTO file_refs (uuid, pyrus_file_id, content_type, file_name)
+     VALUES ($1, $2, $3, $4) ON CONFLICT (uuid) DO NOTHING`,
+    [uuid, pyrusFileId, contentType, fileName]
+  );
+}
+
+async function getFileRef(uuid) {
+  const { rows } = await pool.query('SELECT * FROM file_refs WHERE uuid = $1', [uuid]);
+  return rows[0] || null;
+}
+
 module.exports = {
   initSchema,
   upsertAccount,
@@ -133,4 +156,6 @@ module.exports = {
   saveMessage,
   getMessage,
   updateMessageCommentId,
+  saveFileRef,
+  getFileRef,
 };
