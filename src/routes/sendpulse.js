@@ -280,7 +280,7 @@ router.post('/webhook', async (req, res) => {
           channel,
         });
       }
-
+      //
       // TODO: save message
       // if (mid) {
       //   const rawAttachmentsForDb = rawAttachments.length > 0 ? rawAttachments : null;
