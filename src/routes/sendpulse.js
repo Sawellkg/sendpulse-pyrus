@@ -9,6 +9,8 @@ const db = require('../db');
 const pyrusApi = require('../services/pyrusApi');
 const sentCache = require('../sentCache');
 
+const sendpulseApi = require('../services/sendpulseApi');
+
 const router = express.Router();
 
 /**
@@ -51,7 +53,43 @@ function extractMessageText(channelData) {
  * Format a reply message: quote the original, then the reply text.
  */
 function formatReply(originalText, replyText) {
-  return `${originalText}\n\n${replyText}`;
+  const quoted = originalText.split('\n').map(l => `> ${l}`).join('\n');
+  return replyText ? `${quoted}\n\n${replyText}` : quoted;
+}
+
+/**
+ * Extract text and raw attachments from a SendPulse chat history item.
+ * Returns { text, attachments } where attachments is in webhook format [{ type, payload: { url } }].
+ */
+function extractChatItemContent(item) {
+  const type = item.type;
+  const data = item.data || {};
+
+  if (type === 'text') {
+    return { text: data.message?.text || '', attachments: [] };
+  }
+
+  if (type === 'reply_to_message') {
+    const attachments = Array.isArray(data.attachments)
+      ? data.attachments
+      : [];
+    return { text: data.text || '', attachments };
+  }
+
+  if (type === 'image' || type === 'video') {
+    const url = data.message?.attachment?.payload?.url || '';
+    const atts = url ? [{ type, payload: { url } }] : [];
+    return { text: '', attachments: atts };
+  }
+
+  if (type === 'ig_reel') {
+    const title = data.message?.attachment?.payload?.title || '';
+    const url = data.message?.attachment?.payload?.url || '';
+    const atts = url ? [{ type, payload: { url } }] : [];
+    return { text: title ? `[Reel] ${title}` : '[Reel]', attachments: atts };
+  }
+
+  return { text: `[${type}]`, attachments: [] };
 }
 
 /**
@@ -153,14 +191,28 @@ router.post('/webhook', async (req, res) => {
       // Extract message text (URLs excluded when files are uploaded)
       let messageText = extractMessageText(channelData);
 
-      // Handle reply_to: prepend quoted original message
-      // TODO: rewrite reply handling
-      // if (msg.reply_to && msg.reply_to.mid) {
-      //   const original = await db.getMessage(msg.reply_to.mid);
-      //   if (original) {
-      //     messageText = formatReply(original.text, messageText);
-      //   }
-      // }
+      // Handle reply_to: fetch original message from SP, quote it, upload its attachments
+      if (msg.reply_to && msg.reply_to.mid) {
+        try {
+          const history = await sendpulseApi.getChatMessages({
+            spClientId: account.sp_client_id,
+            spClientSecret: account.sp_client_secret,
+            contactId: contact.id,
+            size: 50,
+          });
+          const original = history.find(m => m.data?.message_id === msg.reply_to.mid);
+          if (original) {
+            const { text: origText, attachments: origAtts } = extractChatItemContent(original);
+            if (origAtts.length > 0) {
+              const origGuids = await downloadAndUploadAttachments(origAtts);
+              attachmentGuids.unshift(...origGuids); // quoted media first
+            }
+            messageText = formatReply(origText || '[Медиа]', messageText);
+          }
+        } catch (replyErr) {
+          console.warn('[sp/incoming] reply_to lookup failed:', replyErr.message);
+        }
+      }
 
       if (!messageText && !attachmentGuids.length) continue;
 

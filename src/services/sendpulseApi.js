@@ -97,4 +97,19 @@ async function sendMedia({ spClientId, spClientSecret, botId, contactId, channel
   }
 }
 
-module.exports = { validateCredentials, sendMessage, sendMedia };
+/**
+ * Fetch recent chat messages for a contact.
+ * Used to look up the original message when handling reply_to.
+ * Returns the raw data[] array from SP.
+ */
+async function getChatMessages({ spClientId, spClientSecret, contactId, size = 50 }) {
+  const token = await getToken(spClientId, spClientSecret);
+  const res = await axios.get(`${BASE}/instagram/chats/messages`, {
+    params: { contact_id: contactId, size },
+    headers: { Authorization: `Bearer ${token}` },
+    timeout: 15_000,
+  });
+  return res.data?.data || [];
+}
+
+module.exports = { validateCredentials, sendMessage, sendMedia, getChatMessages };
