@@ -175,9 +175,10 @@ router.post('/webhook', async (req, res) => {
         });
       }
 
-      // Save message with conversation_id and full payload
+      // Save message with conversation_id, full payload and raw attachments
       if (mid) {
-        await db.saveMessage(mid, messageText, 'incoming', conversation.id, event);
+        const rawAttachmentsForDb = rawAttachments.length > 0 ? rawAttachments : null;
+        await db.saveMessage(mid, messageText, 'incoming', conversation.id, event, rawAttachmentsForDb);
       }
 
       // Detect message type
@@ -239,9 +240,10 @@ async function handleOutgoing(event) {
     return;
   }
 
-  // Always save to DB with full payload
+  // Always save to DB with full payload and raw attachments
   if (mid) {
-    await db.saveMessage(mid, messageText, 'outgoing', conversation.id, event);
+    const outAttachments = channelData.message?.attachments?.length > 0 ? channelData.message.attachments : null;
+    await db.saveMessage(mid, messageText, 'outgoing', conversation.id, event, outAttachments);
   }
 
   // Don't forward echo back to Pyrus
