@@ -223,22 +223,29 @@ async function handleOutgoing(event) {
   const mid = channelData.message_id || null;
   const sentBy = event.info?.message?.sent_by || null;
 
-  // Skip echo: messages we sent via /sendmessage are marked in sentCache
-  if (!sentBy && sentCache.has(contact.id)) { console.log('[sp/outgoing] skip echo for', contact.id); return; }
+  const isEcho = !sentBy && sentCache.has(contact.id);
+  if (isEcho) console.log('[sp/outgoing] echo for', contact.id);
 
   const messageText = extractOutgoingText(channelData);
-  console.log('[sp/outgoing] sentBy:', !!sentBy, 'text:', messageText?.slice(0, 50));
+  console.log('[sp/outgoing] sentBy:', !!sentBy, 'echo:', isEcho, 'text:', messageText?.slice(0, 50));
   if (!messageText) return;
 
   const account = await findAccountByBotId(bot.id);
   if (!account) { console.warn('[sp/outgoing] no account for bot_id:', bot.id); return; }
 
   const conversation = await db.getConversation(account.account_id, contact.id);
-  console.log('[sp/outgoing] conversation:', conversation?.id, 'task_id:', conversation?.pyrus_task_id);
   if (!conversation) {
     console.warn('[sp/outgoing] no conversation for contact:', contact.id);
     return;
   }
+
+  // Always save to DB
+  if (mid) {
+    await db.saveMessage(mid, messageText, 'outgoing', conversation.id);
+  }
+
+  // Don't forward echo back to Pyrus
+  if (isEcho) return;
 
   const authorLabel = sentBy
     ? `${sentBy.firstname || ''} ${sentBy.lastname || ''}`.trim() || sentBy.email || 'Оператор SP'
@@ -251,10 +258,6 @@ async function handleOutgoing(event) {
     messageText: `[→ ${authorLabel}]: ${messageText}`,
     messageId: mid || undefined,
   });
-
-  if (mid) {
-    await db.saveMessage(mid, messageText, 'outgoing', conversation.id);
-  }
 }
 
 async function findAccountByBotId(botId) {
