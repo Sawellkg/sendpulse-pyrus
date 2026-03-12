@@ -201,6 +201,7 @@ router.post('/webhook', async (req, res) => {
             size: 50,
           });
           const original = history.find(m => m.data?.message_id === msg.reply_to.mid);
+          console.log('[sp/reply_to] mid:', msg.reply_to.mid, 'found:', original ? `type=${original.type} data=${JSON.stringify(original.data)}` : 'not found');
           if (original) {
             const { text: origText, attachments: origAtts } = extractChatItemContent(original);
             if (origAtts.length > 0) {
