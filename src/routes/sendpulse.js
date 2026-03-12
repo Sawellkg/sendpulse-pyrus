@@ -223,6 +223,7 @@ router.post('/webhook', async (req, res) => {
       let messageText = extractMessageText(channelData);
 
       // Handle reply_to
+      let replyHtml = null;
       if (msg.reply_to) {
         try {
           if (msg.reply_to.mid) {
@@ -242,7 +243,9 @@ router.post('/webhook', async (req, res) => {
                 const origGuids = await downloadAndUploadAttachments(origAtts);
                 attachmentGuids.unshift(...origGuids);
               }
-              messageText = formatReply(origText || '[Медиа]', messageText);
+              const quoted = origText || '[Медиа]';
+              messageText = formatReply(quoted, messageText);
+              replyHtml = `<q>${quoted}</q><br>${messageText.split('\n\n').slice(1).join('\n\n') || messageText}`;
             }
           } else if (msg.reply_to.story) {
             // Reply to a story — download story media and attach
@@ -256,6 +259,7 @@ router.post('/webhook', async (req, res) => {
               }
             }
             messageText = formatReply('[История]', messageText);
+            replyHtml = `<q>[История]</q><br>${messageText.split('\n\n').slice(1).join('\n\n') || messageText}`;
           }
         } catch (replyErr) {
           console.warn('[sp/incoming] reply_to lookup failed:', replyErr.message);
@@ -302,6 +306,7 @@ router.post('/webhook', async (req, res) => {
         channelId: contact.id,
         senderName: contact.username || contact.name || 'Неизвестный',
         messageText: messageText || ' ',
+        messageTextHtml: replyHtml || undefined,
         messageId: mid || undefined,
         messageType: isPostComment ? 'post_comment' : 'direct',
         mappings,
