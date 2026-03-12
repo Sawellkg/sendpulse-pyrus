@@ -135,6 +135,12 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
       }
     }
 
+    // Save outgoing message to DB
+    if (hasText) {
+      const mid = `pyrus_${Date.now()}_${channel_id}`;
+      await db.saveMessage(mid, message_text, 'outgoing', conversation.id);
+    }
+
     sentCache.mark(channel_id);
     res.json({ status: 'ok' });
   } catch (err) {

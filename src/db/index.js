@@ -9,6 +9,8 @@ async function initSchema() {
   // Migrations
   await pool.query(`ALTER TABLE accounts DROP COLUMN IF EXISTS pyrus_form_id;`).catch(() => {});
   await pool.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS access_token TEXT;`).catch(() => {});
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS direction TEXT DEFAULT 'incoming';`).catch(() => {});
+  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS conversation_id INTEGER REFERENCES conversations(id);`).catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accounts (
@@ -98,10 +100,11 @@ async function updateConversationTaskId(id, pyrusTaskId) {
 
 // messages
 
-async function saveMessage(mid, text) {
+async function saveMessage(mid, text, direction = 'incoming', conversationId = null) {
   await pool.query(
-    `INSERT INTO messages (mid, text) VALUES ($1, $2) ON CONFLICT (mid) DO NOTHING`,
-    [mid, text]
+    `INSERT INTO messages (mid, text, direction, conversation_id)
+     VALUES ($1, $2, $3, $4) ON CONFLICT (mid) DO NOTHING`,
+    [mid, text || '', direction, conversationId]
   );
 }
 

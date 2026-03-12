@@ -251,6 +251,10 @@ async function handleOutgoing(event) {
     messageText: `[→ ${authorLabel}]: ${messageText}`,
     messageId: mid || undefined,
   });
+
+  if (mid) {
+    await db.saveMessage(mid, messageText, 'outgoing', conversation.id);
+  }
 }
 
 async function findAccountByBotId(botId) {
