@@ -130,8 +130,8 @@ async function downloadAndUploadAttachments(attachments) {
       const contentType = res.headers['content-type'] || '';
       const ext = contentType.includes('video') ? 'mp4'
         : contentType.includes('png') ? 'png'
-        : contentType.includes('gif') ? 'gif'
-        : 'jpg';
+          : contentType.includes('gif') ? 'gif'
+            : 'jpg';
       const fileName = `${att.type}_${Date.now()}_${guids.length}.${ext}`;
       filePath = path.join(os.tmpdir(), fileName);
       fs.writeFileSync(filePath, Buffer.from(res.data));
@@ -146,7 +146,7 @@ async function downloadAndUploadAttachments(attachments) {
   }
 
   for (const f of tempFiles) {
-    try { fs.unlinkSync(f); } catch {}
+    try { fs.unlinkSync(f); } catch { }
   }
 
   return guids;
@@ -203,7 +203,7 @@ router.post('/webhook', async (req, res) => {
               contactId: contact.id,
               size: 50,
             });
-            console.log('[sp/reply_to] history raw:', JSON.stringify(history));
+            //console.log('[sp/reply_to] history raw:', JSON.stringify(history));
             const original = history.find(m => m.data?.message_id === msg.reply_to.mid);
             console.log('[sp/reply_to] looking for mid:', msg.reply_to.mid, '→', original ? `found type=${original.type}` : 'not found');
             if (original) {
