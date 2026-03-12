@@ -271,7 +271,8 @@ router.post('/webhook', async (req, res) => {
 
       // Find or create conversation record
       let conversation = await db.getConversation(account.account_id, contact.id);
-      const isFirstMessage = !conversation || !conversation.pyrus_task_id;
+      //const isFirstMessage = !conversation || !conversation.pyrus_task_id;
+      const isFirstMessage = !conversation;
       if (!conversation) {
         conversation = await db.createConversation({
           accountId: account.account_id,
