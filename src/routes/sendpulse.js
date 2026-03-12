@@ -69,10 +69,11 @@ function extractChatItemContent(item) {
     return { text: data.message?.text || '', attachments: [] };
   }
 
-  if (type === 'reply_to_message') {
-    const attachments = Array.isArray(data.attachments)
-      ? data.attachments
-      : [];
+  // 'attachments' — incoming message with only attachments (no text)
+  // 'reply_to_message' — reply with optional text and attachments
+  // Both have: data.text + data.attachments[]
+  if (type === 'attachments' || type === 'reply_to_message') {
+    const attachments = Array.isArray(data.attachments) ? data.attachments : [];
     return { text: data.text || '', attachments };
   }
 
