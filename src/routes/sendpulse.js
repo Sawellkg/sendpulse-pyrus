@@ -192,24 +192,38 @@ router.post('/webhook', async (req, res) => {
       // Extract message text (URLs excluded when files are uploaded)
       let messageText = extractMessageText(channelData);
 
-      // Handle reply_to: fetch original message from SP, quote it, upload its attachments
-      if (msg.reply_to && msg.reply_to.mid) {
+      // Handle reply_to
+      if (msg.reply_to) {
         try {
-          const history = await sendpulseApi.getChatMessages({
-            spClientId: account.sp_client_id,
-            spClientSecret: account.sp_client_secret,
-            contactId: contact.id,
-            size: 50,
-          });
-          const original = history.find(m => m.data?.message_id === msg.reply_to.mid);
-          console.log('[sp/reply_to] mid:', msg.reply_to.mid, 'found:', original ? `type=${original.type} data=${JSON.stringify(original.data)}` : 'not found');
-          if (original) {
-            const { text: origText, attachments: origAtts } = extractChatItemContent(original);
-            if (origAtts.length > 0) {
-              const origGuids = await downloadAndUploadAttachments(origAtts);
-              attachmentGuids.unshift(...origGuids); // quoted media first
+          if (msg.reply_to.mid) {
+            // Reply to a regular message — look up in chat history
+            const history = await sendpulseApi.getChatMessages({
+              spClientId: account.sp_client_id,
+              spClientSecret: account.sp_client_secret,
+              contactId: contact.id,
+              size: 50,
+            });
+            const original = history.find(m => m.data?.message_id === msg.reply_to.mid);
+            if (original) {
+              const { text: origText, attachments: origAtts } = extractChatItemContent(original);
+              if (origAtts.length > 0) {
+                const origGuids = await downloadAndUploadAttachments(origAtts);
+                attachmentGuids.unshift(...origGuids);
+              }
+              messageText = formatReply(origText || '[Медиа]', messageText);
             }
-            messageText = formatReply(origText || '[Медиа]', messageText);
+          } else if (msg.reply_to.story) {
+            // Reply to a story — download story media and attach
+            const storyUrl = msg.reply_to.story.url;
+            if (storyUrl) {
+              try {
+                const storyGuids = await downloadAndUploadAttachments([{ type: 'image', payload: { url: storyUrl } }]);
+                attachmentGuids.unshift(...storyGuids);
+              } catch (storyErr) {
+                console.warn('[sp/incoming] story download failed:', storyErr.message);
+              }
+            }
+            messageText = formatReply('[История]', messageText);
           }
         } catch (replyErr) {
           console.warn('[sp/incoming] reply_to lookup failed:', replyErr.message);
