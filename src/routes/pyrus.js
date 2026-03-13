@@ -81,6 +81,22 @@ router.post('/createdialog', verifySignature, (req, res) => {
   res.json({ status: 'ok' });
 });
 
+/**
+ * Map a SendPulse API error to a Pyrus sendmessage error response.
+ */
+function spErrorToPayrus(err) {
+  const status = err.response?.status;
+  const data = err.response?.data;
+  if (status === 401 || status === 403) {
+    return { code: 400, body: { error_code: 'bad_credentials', error: 'SendPulse credentials are invalid or expired' } };
+  }
+  const msg = (typeof data === 'object' ? JSON.stringify(data) : String(data || err.message));
+  if (msg.toLowerCase().includes('block')) {
+    return { code: 400, body: { error_code: 'account_blocked_by_user', error: msg } };
+  }
+  return { code: 400, body: { error_code: 'external_error', error: msg } };
+}
+
 // POST /pyrus/sendmessage — agent replied in Pyrus → forward to SendPulse
 // Pyrus sends: { account_id, channel_id, message_text, attachment_ids, credentials }
 router.post('/sendmessage', verifySignature, async (req, res) => {
@@ -116,7 +132,13 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
 
     // Send text message
     if (hasText) {
-      await sendpulseApi.sendMessage({ ...spParams, text: message_text });
+      try {
+        await sendpulseApi.sendMessage({ ...spParams, text: message_text });
+      } catch (err) {
+        const { code, body } = spErrorToPayrus(err);
+        console.error('[pyrus/sendmessage] text send failed:', body);
+        return res.status(code).json(body);
+      }
     }
 
     // Send attachments
@@ -131,7 +153,9 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
           console.log(`[pyrus/sendmessage] serving attachment ${fileId} as ${publicUrl}`);
           await sendpulseApi.sendMedia({ ...spParams, url: publicUrl, contentType });
         } catch (attErr) {
-          console.error(`[pyrus/sendmessage] attachment ${fileId} failed:`, attErr.message);
+          const { code, body } = spErrorToPayrus(attErr);
+          console.error(`[pyrus/sendmessage] attachment ${fileId} failed:`, body);
+          return res.status(code).json(body);
         }
       }
     }
@@ -140,7 +164,7 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
     res.json({ status: 'ok' });
   } catch (err) {
     console.error('[pyrus/sendmessage]', err.message);
-    res.status(500).json({ error: 'internal_error' });
+    res.status(500).json({ error_code: 'internal_error', error: err.message });
   }
 });
 
