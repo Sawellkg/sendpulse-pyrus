@@ -333,19 +333,7 @@ router.post('/webhook', async (req, res) => {
       // Detect message type
       const isPostComment = !!(channelData.media && channelData.media.permalink);
 
-      // Always send mappings — Pyrus applies them only when creating a new task, ignores on comments.
-      // This handles the case where an old task was deleted and Pyrus creates a fresh one.
-      const mappings = [
-        { code: 'SenderName', value: (contact.name || '').slice(0, 300) },
-        { code: 'Subject', value: messageText.slice(0, 300) },
-        { code: 'accauntName', value: (contact.username || '').slice(0, 300) },
-        { code: 'SenderAccountUrl', value: contact.username ? `https://instagram.com/${contact.username}` : '' },
-        { code: 'MessageType', value: isPostComment ? 'Comment' : 'Direct' },
-        //{ code: 'CallStatus', value: { choice_id: isPostComment ? 2 : 1 } },
-        { code: 'PostUrl', value: isPostComment ? (channelData.media.permalink || '') : '' },
-      ].filter(m => m.value);
-
-      // Send to Pyrus via Extensions API — same channel_id creates task on first call, adds comment on subsequent
+      // Send to Pyrus — no mappings yet, check response first
       const msgRes = await pyrusApi.sendIncomingMessage({
         accountId: account.sp_bot_id,
         channelId: contact.id,
@@ -354,13 +342,30 @@ router.post('/webhook', async (req, res) => {
         messageTextHtml: messageHtml || undefined,
         messageId: mid || undefined,
         messageType: isPostComment ? 'post_comment' : 'direct',
-        mappings,
         attachments: attachmentGuids.length ? attachmentGuids : undefined,
       });
 
       const taskId = msgRes?.tasks?.[0]?.task_id;
       if (taskId && taskId !== conversation.pyrus_task_id) {
+        // New task created (or recreated after deletion) — update stored id and fill form fields
         await db.updateConversationTaskId(conversation.id, taskId);
+        const mappings = [
+          { code: 'SenderName', value: (contact.name || '').slice(0, 300) },
+          { code: 'Subject', value: messageText.slice(0, 300) },
+          { code: 'accauntName', value: (contact.username || '').slice(0, 300) },
+          { code: 'SenderAccountUrl', value: contact.username ? `https://instagram.com/${contact.username}` : '' },
+          { code: 'MessageType', value: isPostComment ? 'Comment' : 'Direct' },
+          //{ code: 'CallStatus', value: { choice_id: isPostComment ? 2 : 1 } },
+          { code: 'PostUrl', value: isPostComment ? (channelData.media.permalink || '') : '' },
+        ].filter(m => m.value);
+        await pyrusApi.sendIncomingMessage({
+          accountId: account.sp_bot_id,
+          channelId: contact.id,
+          senderName: contact.username || contact.name || 'Неизвестный',
+          messageText: ' ',
+          messageType: isPostComment ? 'post_comment' : 'direct',
+          mappings,
+        });
       }
     }
   } catch (err) {
