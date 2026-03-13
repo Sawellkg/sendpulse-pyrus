@@ -42,7 +42,7 @@ function extractMessageText(channelData) {
     const mediaUrl = media.media_url || null;
     const mediaType = (media.media_type || 'IMAGE').toUpperCase() === 'VIDEO' ? 'video' : 'image';
 
-    const text = [`[Комментарий к посту: ${permalink}]`, caption, commentText].filter(Boolean).join('\n\n');
+    const text = [`Комментарий к посту: ${permalink}`, caption, commentText].filter(Boolean).join('\n\n');
     const htmlParts = [`<b>Комментарий к посту: ${permalink}</b>`];
     if (caption) htmlParts.push(`<q>${caption}</q>`);
     if (commentText) htmlParts.push(`<b>${commentText}</b>`);
@@ -315,7 +315,6 @@ router.post('/webhook', async (req, res) => {
 
       // Find or create conversation record
       let conversation = await db.getConversation(account.account_id, contact.id);
-      const isFirstMessage = !conversation || !conversation.pyrus_task_id;
       if (!conversation) {
         conversation = await db.createConversation({
           accountId: account.account_id,
@@ -334,8 +333,9 @@ router.post('/webhook', async (req, res) => {
       // Detect message type
       const isPostComment = !!(channelData.media && channelData.media.permalink);
 
-      // Build mappings only for first message (task creation)
-      const mappings = isFirstMessage ? [
+      // Always send mappings — Pyrus applies them only when creating a new task, ignores on comments.
+      // This handles the case where an old task was deleted and Pyrus creates a fresh one.
+      const mappings = [
         { code: 'SenderName', value: (contact.name || '').slice(0, 300) },
         { code: 'Subject', value: messageText.slice(0, 300) },
         { code: 'accauntName', value: (contact.username || '').slice(0, 300) },
@@ -343,7 +343,7 @@ router.post('/webhook', async (req, res) => {
         { code: 'MessageType', value: isPostComment ? 'Comment' : 'Direct' },
         //{ code: 'CallStatus', value: { choice_id: isPostComment ? 2 : 1 } },
         { code: 'PostUrl', value: isPostComment ? (channelData.media.permalink || '') : '' },
-      ].filter(m => m.value) : undefined;
+      ].filter(m => m.value);
 
       // Send to Pyrus via Extensions API — same channel_id creates task on first call, adds comment on subsequent
       const msgRes = await pyrusApi.sendIncomingMessage({
@@ -359,7 +359,7 @@ router.post('/webhook', async (req, res) => {
       });
 
       const taskId = msgRes?.tasks?.[0]?.task_id;
-      if (taskId && !conversation.pyrus_task_id) {
+      if (taskId && taskId !== conversation.pyrus_task_id) {
         await db.updateConversationTaskId(conversation.id, taskId);
       }
     }
