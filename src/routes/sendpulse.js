@@ -42,7 +42,7 @@ function extractMessageText(channelData) {
     const mediaUrl = media.media_url || null;
     const mediaType = (media.media_type || 'IMAGE').toUpperCase() === 'VIDEO' ? 'video' : 'image';
 
-    const text = [`Комментарий к посту: ${permalink}`, caption, commentText].filter(Boolean).join('\n\n');
+    const text = [`[Комментарий к посту: ${permalink}]`, caption, commentText].filter(Boolean).join('\n\n');
     const htmlParts = [`<b>Комментарий к посту: ${permalink}</b>`];
     if (caption) htmlParts.push(`<q>${caption}</q>`);
     if (commentText) htmlParts.push(`<b>${commentText}</b>`);
