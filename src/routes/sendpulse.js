@@ -3,6 +3,9 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { execFile } = require('child_process');
+const { promisify } = require('util');
+const execFileAsync = promisify(execFile);
 const axios = require('axios');
 const express = require('express');
 const db = require('../db');
@@ -151,6 +154,17 @@ async function resolveAttachmentBuffer(att) {
 
 /**
  * Download attachments, upload to Pyrus, return guids.
+/**
+ * Convert an audio file to OGA (Ogg Vorbis) using ffmpeg.
+ * Returns the path to the converted file.
+ */
+async function convertToOga(inputPath) {
+  const outputPath = inputPath.replace(/\.[^.]+$/, '.oga');
+  await execFileAsync('ffmpeg', ['-i', inputPath, '-c:a', 'libvorbis', '-q:a', '4', '-y', outputPath]);
+  return outputPath;
+}
+
+/**
  * Temp files are deleted after upload regardless of outcome.
  */
 async function downloadAndUploadAttachments(attachments) {
@@ -168,7 +182,17 @@ async function downloadAndUploadAttachments(attachments) {
       fs.writeFileSync(filePath, buffer);
       tempFiles.push(filePath);
 
-      const guid = await pyrusApi.uploadFile(filePath, fileName || tmpName);
+      let uploadPath = filePath;
+      let uploadName = fileName || tmpName;
+      if (att.type === 'audio') {
+        const ogaPath = await convertToOga(filePath);
+        tempFiles.push(ogaPath);
+        uploadPath = ogaPath;
+        uploadName = uploadName.replace(/\.[^.]+$/, '.oga');
+        console.log(`[sp/attachments] converted audio → ${ogaPath}`);
+      }
+
+      const guid = await pyrusApi.uploadFile(uploadPath, uploadName);
       guids.push(guid);
       console.log(`[sp/attachments] uploaded ${att.type} → guid ${guid}`);
     } catch (err) {
