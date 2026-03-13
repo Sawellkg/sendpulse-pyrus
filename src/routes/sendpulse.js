@@ -34,11 +34,27 @@ function extractMessageText(channelData) {
     return [`[Реклама: ${adTitle}]`, videoUrl, text].filter(Boolean).join('\n');
   }
 
-  // Comment on a post
+  // Comment on a post — returns object with html and postMedia
   if (media && media.permalink) {
-    const text = msg.text || '';
-    return [`[Комментарий к посту: ${media.permalink}]`, text].filter(Boolean).join('\n');
+    const permalink = media.permalink;
+    const caption = media.caption || '';
+    const commentText = msg.text || '';
+    const mediaUrl = media.media_url || null;
+    const mediaType = (media.media_type || 'IMAGE').toUpperCase() === 'VIDEO' ? 'video' : 'image';
+
+    const text = [`Комментарий к посту: ${permalink}`, caption, commentText].filter(Boolean).join('\n\n');
+    const htmlParts = [`<b>Комментарий к посту: ${permalink}</b>`];
+    if (caption) htmlParts.push(`<q>${caption}</q>`);
+    if (commentText) htmlParts.push(`<b>${commentText}</b>`);
+    const html = htmlParts.join('<br>');
+
+    return {
+      text,
+      html,
+      postMedia: mediaUrl ? { type: mediaType, payload: { url: mediaUrl } } : null,
+    };
   }
+
 
   // Reel or media attachments — files uploaded separately, URLs omitted here
   if (attachments.length > 0) {
@@ -238,17 +254,21 @@ router.post('/webhook', async (req, res) => {
         continue;
       }
 
+      // Extract message text (may include post comment HTML and post media)
+      const extracted = extractMessageText(channelData);
+      let messageText = typeof extracted === 'object' ? extracted.text : extracted;
+      let messageHtml = typeof extracted === 'object' ? (extracted.html || null) : null;
+      const postMedia = typeof extracted === 'object' ? (extracted.postMedia || null) : null;
+
       // Upload attachments to Pyrus and collect guids
-      const rawAttachments = msg.attachments || [];
+      // Post media (if any) goes first so it appears before the comment text
+      const rawAttachments = [
+        ...(postMedia ? [postMedia] : []),
+        ...(msg.attachments || []),
+      ];
       const attachmentGuids = rawAttachments.length > 0
         ? await downloadAndUploadAttachments(rawAttachments)
         : [];
-
-      // Extract message text (URLs excluded when files are uploaded)
-      let messageText = extractMessageText(channelData);
-
-      // Handle reply_to
-      let replyHtml = null;
       if (msg.reply_to) {
         try {
           if (msg.reply_to.mid) {
@@ -270,7 +290,7 @@ router.post('/webhook', async (req, res) => {
               }
               const quoted = origText || '[Медиа]';
               messageText = formatReply(quoted, messageText);
-              replyHtml = `<q>${quoted}</q><br>${messageText.split('\n\n').slice(1).join('\n\n') || messageText}`;
+              messageHtml = `<q>${quoted}</q><br>${messageText.split('\n\n').slice(1).join('\n\n') || messageText}`;
             }
           } else if (msg.reply_to.story) {
             // Reply to a story — download story media and attach
@@ -284,7 +304,7 @@ router.post('/webhook', async (req, res) => {
               }
             }
             messageText = formatReply('[История]', messageText);
-            replyHtml = `<q>[История]</q><br>${messageText.split('\n\n').slice(1).join('\n\n') || messageText}`;
+            messageHtml = `<q>[История]</q><br>${messageText.split('\n\n').slice(1).join('\n\n') || messageText}`;
           }
         } catch (replyErr) {
           console.warn('[sp/incoming] reply_to lookup failed:', replyErr.message);
@@ -331,7 +351,7 @@ router.post('/webhook', async (req, res) => {
         channelId: contact.id,
         senderName: contact.username || contact.name || 'Неизвестный',
         messageText: messageText || ' ',
-        messageTextHtml: replyHtml || undefined,
+        messageTextHtml: messageHtml || undefined,
         messageId: mid || undefined,
         messageType: isPostComment ? 'post_comment' : 'direct',
         mappings,
