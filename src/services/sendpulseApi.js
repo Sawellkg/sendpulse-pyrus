@@ -115,6 +115,26 @@ async function sendMedia({ spClientId, spClientSecret, botId, contactId, channel
 }
 
 /**
+ * Pause bot automation for a contact so the bot doesn't reply while an operator is handling it.
+ * @param {number} [minutes=1440] - Duration in minutes (default 24 hours)
+ */
+async function setPauseAutomation({ spClientId, spClientSecret, botId, contactId, channel, minutes = 1440 }) {
+  const token = await getToken(spClientId, spClientSecret);
+  const service = channel.toLowerCase();
+  const body = { bot_id: botId, contact_id: contactId, minutes };
+  console.log(`[sp/setPauseAutomation] POST ${BASE}/${service}/contacts/setPauseAutomation`, JSON.stringify(body));
+  try {
+    const res = await axios.post(`${BASE}/${service}/contacts/setPauseAutomation`, body, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    console.log('[sp/setPauseAutomation] response:', res.status, JSON.stringify(res.data));
+  } catch (err) {
+    console.error('[sp/setPauseAutomation] error:', err.response?.status, JSON.stringify(err.response?.data));
+    // Non-fatal — don't rethrow, operator message was already delivered
+  }
+}
+
+/**
  * Fetch recent chat messages for a contact.
  * Used to look up the original message when handling reply_to.
  * Returns the raw data[] array from SP.
@@ -129,4 +149,4 @@ async function getChatMessages({ spClientId, spClientSecret, contactId, size = 5
   return res.data?.data || [];
 }
 
-module.exports = { validateCredentials, sendMessage, sendMedia, getChatMessages };
+module.exports = { validateCredentials, sendMessage, sendMedia, setPauseAutomation, getChatMessages };

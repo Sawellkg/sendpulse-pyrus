@@ -148,6 +148,8 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
     if (hasText) {
       try {
         await sendpulseApi.sendMessage({ ...spParams, text: message_text });
+        // Pause bot automation so the bot doesn't override the operator's reply
+        await sendpulseApi.setPauseAutomation({ ...spParams });
       } catch (err) {
         const { code, body } = spErrorToPayrus(err);
         console.error('[pyrus/sendmessage] text send failed:', body);
