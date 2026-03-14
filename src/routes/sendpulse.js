@@ -353,7 +353,7 @@ router.post('/webhook', (req, res) => {
 
   const events = Array.isArray(req.body) ? req.body : [req.body];
   for (const event of events) {
-    console.log('[sp/webhook] event title:', event.title, 'contact:', event.contact?.id);
+    console.log('[sp/webhook] event:', JSON.stringify(event));
     const contactId = event.contact?.id;
     if (!contactId) continue;
 
