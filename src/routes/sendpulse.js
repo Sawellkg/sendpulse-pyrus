@@ -135,6 +135,7 @@ function extractOutgoingText(channelData) {
 
 const { serviceUrl } = require('../config');
 const tempStore = require('../tempStore');
+const contactQueue = require('../contactQueue');
 
 /**
  * Resolve an attachment URL to { buffer, contentType, fileName }.
@@ -223,153 +224,144 @@ async function downloadAndUploadAttachments(attachments) {
   return guids;
 }
 
+async function handleIncoming(event) {
+  const contact = event.contact || {};
+  const bot = event.bot || {};
+  const channelData = event.info?.message?.channel_data || {};
+  const msg = channelData.message || {};
+  const mid = channelData.message_id || msg.mid || msg.message_id || null;
+  const channel = (bot.channel || event.service || '').toUpperCase();
+
+  const account = await findAccountByBotId(bot.id);
+  if (!account) {
+    console.warn(`[sp/incoming] No account found for bot_id=${bot.id}`);
+    return;
+  }
+
+  // Extract message text (may include post comment HTML and post media)
+  const extracted = extractMessageText(channelData);
+  let messageText = typeof extracted === 'object' ? extracted.text : extracted;
+  let messageHtml = typeof extracted === 'object' ? (extracted.html || null) : null;
+  const postMedia = typeof extracted === 'object' ? (extracted.postMedia || null) : null;
+
+  // Upload attachments to Pyrus and collect guids
+  // Post media (if any) goes first so it appears before the comment text
+  const rawAttachments = [
+    ...(postMedia ? [postMedia] : []),
+    ...(msg.attachments || []),
+  ];
+  const attachmentGuids = rawAttachments.length > 0
+    ? await downloadAndUploadAttachments(rawAttachments)
+    : [];
+
+  if (msg.reply_to) {
+    try {
+      if (msg.reply_to.mid) {
+        // Reply to a regular message — look up in chat history
+        const history = await sendpulseApi.getChatMessages({
+          spClientId: account.sp_client_id,
+          spClientSecret: account.sp_client_secret,
+          contactId: contact.id,
+          size: 50,
+        });
+        const original = history.find(m => m.data?.message_id === msg.reply_to.mid);
+        console.log('[sp/reply_to] looking for mid:', msg.reply_to.mid, '→', original ? `found type=${original.type}` : 'not found');
+        if (original) {
+          const { text: origText, attachments: origAtts } = extractChatItemContent(original);
+          if (origAtts.length > 0) {
+            const origGuids = await downloadAndUploadAttachments(origAtts);
+            attachmentGuids.unshift(...origGuids);
+          }
+          const quoted = origText || '[Медиа]';
+          messageText = formatReply(quoted, messageText);
+          messageHtml = `<q>${quoted}</q><br>${messageText.split('\n\n').slice(1).join('\n\n') || messageText}`;
+        }
+      } else if (msg.reply_to.story) {
+        // Reply to a story — download story media and attach
+        const storyUrl = msg.reply_to.story.url;
+        if (storyUrl) {
+          try {
+            const storyGuids = await downloadAndUploadAttachments([{ type: 'image', payload: { url: storyUrl } }]);
+            attachmentGuids.unshift(...storyGuids);
+          } catch (storyErr) {
+            console.warn('[sp/incoming] story download failed:', storyErr.message);
+          }
+        }
+        messageText = formatReply('[История]', messageText);
+        messageHtml = `<q>[История]</q><br>${messageText.split('\n\n').slice(1).join('\n\n') || messageText}`;
+      }
+    } catch (replyErr) {
+      console.warn('[sp/incoming] reply_to lookup failed:', replyErr.message);
+    }
+  }
+
+  if (!messageText && !attachmentGuids.length) return;
+
+  // Find or create conversation record
+  let conversation = await db.getConversation(account.account_id, contact.id);
+  if (!conversation) {
+    conversation = await db.createConversation({
+      accountId: account.account_id,
+      sendpulseContactId: contact.id,
+      sendpulseBotId: bot.id,
+      channel,
+    });
+  }
+
+  // Detect message type
+  const isPostComment = !!(channelData.media && channelData.media.permalink);
+
+  // Send to Pyrus — no mappings yet, check response first
+  const msgRes = await pyrusApi.sendIncomingMessage({
+    accountId: account.sp_bot_id,
+    channelId: contact.id,
+    senderName: contact.username || contact.name || 'Неизвестный',
+    messageText: messageText || ' ',
+    messageTextHtml: messageHtml || undefined,
+    messageId: mid || undefined,
+    messageType: isPostComment ? 'post_comment' : 'direct',
+    attachments: attachmentGuids.length ? attachmentGuids : undefined,
+  });
+
+  const taskId = msgRes?.tasks?.[0]?.task_id;
+  if (taskId && taskId !== conversation.pyrus_task_id) {
+    // New task created (or recreated after deletion) — update stored id and fill form fields
+    await db.updateConversationTaskId(conversation.id, taskId);
+    const mappings = [
+      { code: 'SenderName', value: (contact.name || '').slice(0, 300) },
+      { code: 'Subject', value: messageText.slice(0, 300) },
+      { code: 'accauntName', value: (contact.username || '').slice(0, 300) },
+      { code: 'SenderAccountUrl', value: contact.username ? `https://instagram.com/${contact.username}` : '' },
+      { code: 'MessageType', value: isPostComment ? 'Comment' : 'Direct' },
+      { code: 'PostUrl', value: isPostComment ? (channelData.media.permalink || '') : '' },
+    ].filter(m => m.value);
+    await pyrusApi.sendIncomingMessage({
+      accountId: account.sp_bot_id,
+      channelId: contact.id,
+      senderName: contact.username || contact.name || 'Неизвестный',
+      messageText: ' ',
+      messageType: isPostComment ? 'post_comment' : 'direct',
+      mappings,
+    });
+  }
+}
+
 // POST /sendpulse/webhook
-router.post('/webhook', async (req, res) => {
+router.post('/webhook', (req, res) => {
   // Always respond 200 immediately so SendPulse doesn't retry
   res.json({ status: 'ok' });
 
-  try {
-    const events = Array.isArray(req.body) ? req.body : [req.body];
+  const events = Array.isArray(req.body) ? req.body : [req.body];
+  for (const event of events) {
+    console.log('[sp/webhook] event title:', event.title, 'contact:', event.contact?.id);
+    const contactId = event.contact?.id;
+    if (!contactId) continue;
 
-    for (const event of events) {
-      console.log('[sp/webhook] event:', JSON.stringify(event));
-      if (event.title === 'outgoing_message') {
-        await handleOutgoing(event);
-        continue;
-      }
-      if (event.title !== 'incoming_message') continue;
-
-      const contact = event.contact || {};
-      const bot = event.bot || {};
-      const channelData = event.info?.message?.channel_data || {};
-      const msg = channelData.message || {};
-      const mid = channelData.message_id || msg.mid || msg.message_id || null;
-      const channel = (bot.channel || event.service || '').toUpperCase();
-
-      // We need an account to find where to create tasks.
-      // Since SendPulse webhooks are not per-account, find account by bot_id.
-      const account = await findAccountByBotId(bot.id);
-      if (!account) {
-        console.warn(`[sp/webhook] No account found for bot_id=${bot.id}`);
-        continue;
-      }
-
-      // Extract message text (may include post comment HTML and post media)
-      const extracted = extractMessageText(channelData);
-      let messageText = typeof extracted === 'object' ? extracted.text : extracted;
-      let messageHtml = typeof extracted === 'object' ? (extracted.html || null) : null;
-      const postMedia = typeof extracted === 'object' ? (extracted.postMedia || null) : null;
-
-      // Upload attachments to Pyrus and collect guids
-      // Post media (if any) goes first so it appears before the comment text
-      const rawAttachments = [
-        ...(postMedia ? [postMedia] : []),
-        ...(msg.attachments || []),
-      ];
-      const attachmentGuids = rawAttachments.length > 0
-        ? await downloadAndUploadAttachments(rawAttachments)
-        : [];
-      if (msg.reply_to) {
-        try {
-          if (msg.reply_to.mid) {
-            // Reply to a regular message — look up in chat history
-            const history = await sendpulseApi.getChatMessages({
-              spClientId: account.sp_client_id,
-              spClientSecret: account.sp_client_secret,
-              contactId: contact.id,
-              size: 50,
-            });
-            //console.log('[sp/reply_to] history raw:', JSON.stringify(history));
-            const original = history.find(m => m.data?.message_id === msg.reply_to.mid);
-            console.log('[sp/reply_to] looking for mid:', msg.reply_to.mid, '→', original ? `found type=${original.type}` : 'not found');
-            if (original) {
-              const { text: origText, attachments: origAtts } = extractChatItemContent(original);
-              if (origAtts.length > 0) {
-                const origGuids = await downloadAndUploadAttachments(origAtts);
-                attachmentGuids.unshift(...origGuids);
-              }
-              const quoted = origText || '[Медиа]';
-              messageText = formatReply(quoted, messageText);
-              messageHtml = `<q>${quoted}</q><br>${messageText.split('\n\n').slice(1).join('\n\n') || messageText}`;
-            }
-          } else if (msg.reply_to.story) {
-            // Reply to a story — download story media and attach
-            const storyUrl = msg.reply_to.story.url;
-            if (storyUrl) {
-              try {
-                const storyGuids = await downloadAndUploadAttachments([{ type: 'image', payload: { url: storyUrl } }]);
-                attachmentGuids.unshift(...storyGuids);
-              } catch (storyErr) {
-                console.warn('[sp/incoming] story download failed:', storyErr.message);
-              }
-            }
-            messageText = formatReply('[История]', messageText);
-            messageHtml = `<q>[История]</q><br>${messageText.split('\n\n').slice(1).join('\n\n') || messageText}`;
-          }
-        } catch (replyErr) {
-          console.warn('[sp/incoming] reply_to lookup failed:', replyErr.message);
-        }
-      }
-
-      if (!messageText && !attachmentGuids.length) continue;
-
-      // Find or create conversation record
-      let conversation = await db.getConversation(account.account_id, contact.id);
-      if (!conversation) {
-        conversation = await db.createConversation({
-          accountId: account.account_id,
-          sendpulseContactId: contact.id,
-          sendpulseBotId: bot.id,
-          channel,
-        });
-      }
-      //
-      // TODO: save message
-      // if (mid) {
-      //   const rawAttachmentsForDb = rawAttachments.length > 0 ? rawAttachments : null;
-      //   await db.saveMessage(mid, messageText, 'incoming', conversation.id, event, rawAttachmentsForDb);
-      // }
-
-      // Detect message type
-      const isPostComment = !!(channelData.media && channelData.media.permalink);
-
-      // Send to Pyrus — no mappings yet, check response first
-      const msgRes = await pyrusApi.sendIncomingMessage({
-        accountId: account.sp_bot_id,
-        channelId: contact.id,
-        senderName: contact.username || contact.name || 'Неизвестный',
-        messageText: messageText || ' ',
-        messageTextHtml: messageHtml || undefined,
-        messageId: mid || undefined,
-        messageType: isPostComment ? 'post_comment' : 'direct',
-        attachments: attachmentGuids.length ? attachmentGuids : undefined,
-      });
-
-      const taskId = msgRes?.tasks?.[0]?.task_id;
-      if (taskId && taskId !== conversation.pyrus_task_id) {
-        // New task created (or recreated after deletion) — update stored id and fill form fields
-        await db.updateConversationTaskId(conversation.id, taskId);
-        const mappings = [
-          { code: 'SenderName', value: (contact.name || '').slice(0, 300) },
-          { code: 'Subject', value: messageText.slice(0, 300) },
-          { code: 'accauntName', value: (contact.username || '').slice(0, 300) },
-          { code: 'SenderAccountUrl', value: contact.username ? `https://instagram.com/${contact.username}` : '' },
-          { code: 'MessageType', value: isPostComment ? 'Comment' : 'Direct' },
-          //{ code: 'CallStatus', value: { choice_id: isPostComment ? 2 : 1 } },
-          { code: 'PostUrl', value: isPostComment ? (channelData.media.permalink || '') : '' },
-        ].filter(m => m.value);
-        await pyrusApi.sendIncomingMessage({
-          accountId: account.sp_bot_id,
-          channelId: contact.id,
-          senderName: contact.username || contact.name || 'Неизвестный',
-          messageText: ' ',
-          messageType: isPostComment ? 'post_comment' : 'direct',
-          mappings,
-        });
-      }
+    if (event.title === 'incoming_message') {
+      contactQueue.enqueue(contactId, () => handleIncoming(event));
+    } else if (event.title === 'outgoing_message') {
+      contactQueue.enqueue(contactId, () => handleOutgoing(event));
     }
-  } catch (err) {
-    console.error('[sp/webhook]', err.message);
   }
 });
 
