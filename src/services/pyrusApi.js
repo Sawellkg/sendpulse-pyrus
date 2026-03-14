@@ -80,17 +80,32 @@ async function sendIncomingMessage({ accountId, channelId, senderName, messageTe
  * Uses Node 20+ native FormData and Blob.
  */
 async function uploadFile(filePath, fileName) {
-  const token = await getToken();
   const fileBuffer = fs.readFileSync(filePath);
-  const blob = new Blob([fileBuffer]);
-  const form = new FormData();
-  form.append('file', blob, fileName);
-  try {
-    const res = await axios.post(`${BASE}/files/upload`, form, {
+
+  async function attempt() {
+    const token = await getToken();
+    const blob = new Blob([fileBuffer]);
+    const form = new FormData();
+    form.append('file', blob, fileName);
+    return axios.post(`${BASE}/files/upload`, form, {
       headers: { Authorization: `Bearer ${token}` },
     });
+  }
+
+  try {
+    const res = await attempt();
     return res.data.guid;
   } catch (err) {
+    if (err.response?.status === 401) {
+      invalidateToken();
+      try {
+        const res = await attempt();
+        return res.data.guid;
+      } catch (retryErr) {
+        console.error('[pyrusApi] uploadFile retry error:', retryErr.response?.status, JSON.stringify(retryErr.response?.data));
+        throw retryErr;
+      }
+    }
     console.error('[pyrusApi] uploadFile error:', err.response?.status, JSON.stringify(err.response?.data));
     throw err;
   }
@@ -101,12 +116,26 @@ async function uploadFile(filePath, fileName) {
  * Returns { buffer, contentType, fileName }.
  */
 async function downloadFile(fileId) {
-  const token = await getToken();
-  const res = await axios.get(`${BASE}/files/download/${fileId}`, {
-    headers: { Authorization: `Bearer ${token}` },
-    responseType: 'arraybuffer',
-    timeout: 60_000,
-  });
+  async function attempt() {
+    const token = await getToken();
+    return axios.get(`${BASE}/files/download/${fileId}`, {
+      headers: { Authorization: `Bearer ${token}` },
+      responseType: 'arraybuffer',
+      timeout: 60_000,
+    });
+  }
+
+  let res;
+  try {
+    res = await attempt();
+  } catch (err) {
+    if (err.response?.status === 401) {
+      invalidateToken();
+      res = await attempt();
+    } else {
+      throw err;
+    }
+  }
   const contentType = res.headers['content-type'] || 'application/octet-stream';
   const disposition = res.headers['content-disposition'] || '';
   const nameMatch = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';\r\n]+)/i);
