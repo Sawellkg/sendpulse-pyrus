@@ -118,7 +118,7 @@ async function sendMedia({ spClientId, spClientSecret, botId, contactId, channel
  * Pause bot automation for a contact so the bot doesn't reply while an operator is handling it.
  * @param {number} [minutes=1440] - Duration in minutes (default 24 hours)
  */
-async function setPauseAutomation({ spClientId, spClientSecret, botId, contactId, channel, minutes = 1440 }) {
+async function setPauseAutomation({ spClientId, spClientSecret, botId, contactId, channel, minutes = 120 }) {
   const token = await getToken(spClientId, spClientSecret);
   const service = channel.toLowerCase();
   const body = { bot_id: botId, contact_id: contactId, minutes };
