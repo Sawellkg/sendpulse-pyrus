@@ -9,6 +9,8 @@ async function initSchema() {
   // Migrations
   await pool.query(`ALTER TABLE accounts DROP COLUMN IF EXISTS pyrus_form_id;`).catch(() => {});
   await pool.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS access_token TEXT;`).catch(() => {});
+  await pool.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE;`).catch(() => {});
+  await pool.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT FALSE;`).catch(() => {});
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS direction TEXT DEFAULT 'incoming';`).catch(() => {});
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS conversation_id INTEGER REFERENCES conversations(id);`).catch(() => {});
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS payload JSONB;`).catch(() => {});
@@ -64,6 +66,13 @@ async function upsertAccount({ accountId, spClientId, spClientSecret, spBotId, a
        sp_bot_id = EXCLUDED.sp_bot_id,
        access_token = EXCLUDED.access_token`,
     [accountId, spClientId, spClientSecret, spBotId, accessToken]
+  );
+}
+
+async function updateAccountToggle(accountId, { enabled, deleted }) {
+  await pool.query(
+    `UPDATE accounts SET enabled = $2, deleted = $3 WHERE account_id = $1`,
+    [accountId, enabled, deleted]
   );
 }
 
@@ -147,6 +156,7 @@ async function getFileRef(uuid) {
 module.exports = {
   initSchema,
   upsertAccount,
+  updateAccountToggle,
   getAccount,
   getAccountByBotId,
   getConversation,

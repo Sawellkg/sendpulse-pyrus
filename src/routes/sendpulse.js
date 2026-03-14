@@ -237,6 +237,10 @@ async function handleIncoming(event) {
     console.warn(`[sp/incoming] No account found for bot_id=${bot.id}`);
     return;
   }
+  if (account.deleted || account.enabled === false) {
+    console.log(`[sp/incoming] account=${account.account_id} is disabled/deleted, skipping`);
+    return;
+  }
 
   // Extract message text (may include post comment HTML and post media)
   const extracted = extractMessageText(channelData);
@@ -381,6 +385,10 @@ async function handleOutgoing(event) {
 
   const account = await findAccountByBotId(bot.id);
   if (!account) { console.warn('[sp/outgoing] no account for bot_id:', bot.id); return; }
+  if (account.deleted || account.enabled === false) {
+    console.log(`[sp/outgoing] account=${account.account_id} is disabled/deleted, skipping`);
+    return;
+  }
 
   const conversation = await db.getConversation(account.account_id, contact.id);
   if (!conversation) {

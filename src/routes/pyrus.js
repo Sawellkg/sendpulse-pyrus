@@ -67,8 +67,22 @@ router.post('/authorize', async (req, res) => {
 });
 
 // POST /pyrus/toggle — enable/disable notifications
-router.post('/toggle', verifySignature, (req, res) => {
-  res.json({ status: 'ok' });
+router.post('/toggle', verifySignature, async (req, res) => {
+  try {
+    const { account_id, enabled, deleted } = req.body;
+    console.log('[pyrus/toggle] body:', JSON.stringify(req.body));
+    if (account_id) {
+      await db.updateAccountToggle(account_id, {
+        enabled: enabled !== false,
+        deleted: deleted === true,
+      });
+      console.log(`[pyrus/toggle] account=${account_id} enabled=${enabled} deleted=${deleted}`);
+    }
+    res.json({ status: 'ok' });
+  } catch (err) {
+    console.error('[pyrus/toggle]', err.message);
+    res.json({ status: 'ok' }); // always 200 to Pyrus
+  }
 });
 
 // POST /pyrus/event — task events (log only)
