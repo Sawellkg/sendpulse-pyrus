@@ -5,7 +5,7 @@
 
 const cache = new Map();
 
-function mark(contactId, ttlMs = 5_000) {
+function mark(contactId, ttlMs = 10_000) {
   cache.set(contactId, Date.now() + ttlMs);
 }
 
