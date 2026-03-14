@@ -144,6 +144,9 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
       channel: conversation.channel,
     };
 
+    // Mark before sending so the outgoing_message echo webhook is ignored
+    sentCache.mark(channel_id);
+
     // Send text message
     if (hasText) {
       try {
@@ -196,7 +199,6 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
       }
     }
 
-    sentCache.mark(channel_id);
     res.json({ status: 'ok' });
   } catch (err) {
     console.error('[pyrus/sendmessage]', err.message);
