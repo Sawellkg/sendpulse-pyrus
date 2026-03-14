@@ -61,15 +61,31 @@ async function sendMessage({ spClientId, spClientSecret, botId, contactId, chann
 }
 
 /**
+ * Resolve the SendPulse message type for a given MIME contentType and channel.
+ * Returns null if the type is not supported on that channel (caller should skip).
+ */
+function resolveMediaType(contentType, channel) {
+  if (contentType.startsWith('image/')) return 'image';
+  if (contentType.startsWith('video/')) return 'video';
+  // Instagram does not support file/document messages
+  if (channel.toUpperCase() === 'INSTAGRAM') return null;
+  // Telegram supports arbitrary files
+  return 'file';
+}
+
+/**
  * Send a media message (image/video/file) to a SendPulse contact via a public URL.
+ * Returns false if the media type is not supported on the channel (caller may skip gracefully).
  */
 async function sendMedia({ spClientId, spClientSecret, botId, contactId, channel, url, contentType }) {
+  const msgType = resolveMediaType(contentType, channel);
+  if (!msgType) {
+    console.warn(`[sp/sendMedia] skipping unsupported contentType="${contentType}" for channel=${channel}`);
+    return false;
+  }
+
   const token = await getToken(spClientId, spClientSecret);
   const service = channel.toLowerCase();
-
-  let msgType = 'image';
-  if (contentType.startsWith('video/')) msgType = 'video';
-  else if (!contentType.startsWith('image/')) msgType = 'file';
 
   const body = {
     bot_id: botId,
@@ -91,6 +107,7 @@ async function sendMedia({ spClientId, spClientSecret, botId, contactId, channel
       headers: { Authorization: `Bearer ${token}` },
     });
     console.log('[sp/sendMedia] response:', res.status, JSON.stringify(res.data));
+    return true;
   } catch (err) {
     console.error('[sp/sendMedia] error:', err.response?.status, JSON.stringify(err.response?.data));
     throw err;

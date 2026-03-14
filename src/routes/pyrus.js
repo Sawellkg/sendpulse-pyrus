@@ -153,9 +153,15 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
           console.log(`[pyrus/sendmessage] serving attachment ${fileId} as ${publicUrl}`);
           await sendpulseApi.sendMedia({ ...spParams, url: publicUrl, contentType });
         } catch (attErr) {
-          const { code, body } = spErrorToPayrus(attErr);
-          console.error(`[pyrus/sendmessage] attachment ${fileId} failed:`, body);
-          return res.status(code).json(body);
+          const spStatus = attErr.response?.status;
+          // Only propagate auth errors to Pyrus — other errors (e.g. 422 unsupported type)
+          // are logged and skipped so Pyrus does not disconnect the extension.
+          if (spStatus === 401 || spStatus === 403) {
+            const { code, body } = spErrorToPayrus(attErr);
+            console.error(`[pyrus/sendmessage] attachment ${fileId} auth error:`, body);
+            return res.status(code).json(body);
+          }
+          console.error(`[pyrus/sendmessage] attachment ${fileId} skipped (${spStatus}):`, attErr.response?.data ?? attErr.message);
         }
       }
     }
