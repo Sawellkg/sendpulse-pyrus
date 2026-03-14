@@ -151,7 +151,21 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
           await db.saveFileRef(uuid, fileId, contentType, fileName);
           const publicUrl = `${serviceUrl}/temp/${uuid}`;
           console.log(`[pyrus/sendmessage] serving attachment ${fileId} as ${publicUrl}`);
-          await sendpulseApi.sendMedia({ ...spParams, url: publicUrl, contentType });
+          const sent = await sendpulseApi.sendMedia({ ...spParams, url: publicUrl, contentType });
+          if (sent === false) {
+            // Unsupported file type for this channel — notify operator in Pyrus task
+            const notice = `⚠️ Файл "${fileName}" не был отправлен клиенту: ${conversation.channel} не поддерживает этот тип файлов (${contentType}).`;
+            try {
+              await pyrusApi.sendIncomingMessage({
+                accountId: account_id,
+                channelId: channel_id,
+                senderName: 'Система',
+                messageText: notice,
+              });
+            } catch (noticeErr) {
+              console.warn(`[pyrus/sendmessage] could not send unsupported-type notice to Pyrus:`, noticeErr.message);
+            }
+          }
         } catch (attErr) {
           const spStatus = attErr.response?.status;
           // Only propagate auth errors to Pyrus — other errors (e.g. 422 unsupported type)
