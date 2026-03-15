@@ -60,8 +60,8 @@ function extractMessageText(channelData) {
   if (attachments.length > 0) {
     const labels = attachments
       .filter(att => att.type === 'ig_reel' && att.payload?.title)
-      .map(att => `[Reel] ${att.payload.title.slice(0, 300)}`);
-    return [msg.text, ...labels].filter(Boolean).join('\n') || '[Медиа]';
+      .map(att => att.payload.title.slice(0, 300));
+    return [msg.text, ...labels].filter(Boolean).join('\n');
   }
 
   // Plain text
@@ -107,10 +107,10 @@ function extractChatItemContent(item) {
     const title = data.message?.attachment?.payload?.title || '';
     const url = data.message?.attachment?.payload?.url || '';
     const atts = url ? [{ type, payload: { url } }] : [];
-    return { text: title ? `[Reel] ${title}` : '[Reel]', attachments: atts };
+    return { text: title, attachments: atts };
   }
 
-  return { text: `[${type}]`, attachments: [] };
+  return { text: '', attachments: [] };
 }
 
 /**
@@ -276,9 +276,10 @@ async function handleIncoming(event) {
             const origGuids = await downloadAndUploadAttachments(origAtts);
             attachmentGuids.unshift(...origGuids);
           }
-          const quoted = origText || '[Медиа]';
-          messageText = formatReply(quoted, messageText);
-          messageHtml = `<q>${quoted}</q><br>${messageText.split('\n\n').slice(1).join('\n\n') || messageText}`;
+          if (origText) {
+            messageText = formatReply(origText, messageText);
+            messageHtml = `<q>${origText}</q><br>${messageText.split('\n\n').slice(1).join('\n\n') || messageText}`;
+          }
         }
       } else if (msg.reply_to.story) {
         // Reply to a story — download story media and attach
