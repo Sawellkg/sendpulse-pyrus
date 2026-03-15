@@ -413,8 +413,8 @@ async function handleOutgoing(event) {
     accountId: account.sp_bot_id,
     channelId: contact.id,
     senderName: contact.username || contact.name || 'Неизвестный',
-    messageText: `[${authorLabel}]: ${messageText}`,
-    messageTextHtml: `<b>[${authorLabel}]:</b> ${messageText}`,
+    messageText: `${authorLabel}: ${messageText}`,
+    messageTextHtml: `<b>${authorLabel}:</b> ${messageText}`,
     messageId: mid || undefined,
   });
 }
