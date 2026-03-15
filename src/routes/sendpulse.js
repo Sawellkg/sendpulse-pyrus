@@ -412,7 +412,7 @@ async function handleOutgoing(event) {
   await pyrusApi.sendIncomingMessage({
     accountId: account.sp_bot_id,
     channelId: contact.id,
-    senderName: authorLabel || contact.username || contact.name || 'Неизвестный',
+    senderName: contact.username || contact.name || 'Неизвестный',
     messageText: `[→ ${authorLabel}]: ${messageText}`,
     messageId: mid || undefined,
   });
