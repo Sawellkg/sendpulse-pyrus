@@ -150,9 +150,25 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
     // Send text message
     if (hasText) {
       try {
-        await sendpulseApi.sendMessage({ ...spParams, text: message_text });
-        // Pause bot automation so the bot doesn't override the operator's reply
-        await sendpulseApi.setPauseAutomation({ ...spParams });
+        const sendResult = await sendpulseApi.sendMessage({ ...spParams, text: message_text });
+        if (!sendResult.delivered) {
+          // Message accepted by SP but not delivered to client (e.g. Instagram window expired)
+          const notice = `⚠️ Сообщение не доставлено клиенту: ${sendResult.reason}`;
+          console.warn('[pyrus/sendmessage] not delivered:', sendResult.reason);
+          try {
+            await pyrusApi.sendIncomingMessage({
+              accountId: account_id,
+              channelId: channel_id,
+              senderName: 'Система',
+              messageText: notice,
+            });
+          } catch (noticeErr) {
+            console.warn('[pyrus/sendmessage] could not send delivery notice to Pyrus:', noticeErr.message);
+          }
+        } else {
+          // Pause bot automation so the bot doesn't override the operator's reply
+          await sendpulseApi.setPauseAutomation({ ...spParams });
+        }
       } catch (err) {
         const { code, body } = spErrorToPayrus(err);
         console.error('[pyrus/sendmessage] text send failed:', body);

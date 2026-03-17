@@ -54,6 +54,12 @@ async function sendMessage({ spClientId, spClientSecret, botId, contactId, chann
   try {
     const res = await axios.post(url, body, { headers: { Authorization: `Bearer ${token}` } });
     console.log('[sp/sendMessage] response:', res.status, JSON.stringify(res.data));
+    // SP can return 200 with data:false when the message wasn't actually delivered
+    // (e.g. Instagram 24-hour messaging window expired)
+    if (res.data?.data === false && res.data?.message) {
+      return { delivered: false, reason: res.data.message };
+    }
+    return { delivered: true };
   } catch (err) {
     console.error('[sp/sendMessage] error:', err.response?.status, JSON.stringify(err.response?.data));
     throw err;
