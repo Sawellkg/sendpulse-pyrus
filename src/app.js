@@ -41,7 +41,8 @@ app.get('/temp/:uuid', (req, res) => {
   res.setHeader('Content-Type', entry.contentType);
   res.setHeader('Content-Disposition', `inline; filename="${entry.fileName}"`);
   res.send(entry.buffer);
-  tempStore.remove(req.params.uuid);
+  // Do not remove on first serve — SP and Instagram CDN may fetch the URL multiple times.
+  // The TTL timer in tempStore handles cleanup.
 });
 
 async function start() {
