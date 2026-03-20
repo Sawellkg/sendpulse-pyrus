@@ -59,7 +59,7 @@ router.post('/authorize', async (req, res) => {
     console.log('[pyrus/authorize] account saved, id:', spBotId);
 
     // Pyrus messenger extension expects: account_name + account_id
-    res.json({ account_name: 'SendPulse', account_id: spBotId });
+    res.json({ account_name: spBotId, account_id: spBotId });
   } catch (err) {
     console.error('[pyrus/authorize]', err.message);
     res.status(500).json({ error: 'internal_error' });
