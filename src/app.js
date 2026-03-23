@@ -6,6 +6,7 @@ const db = require('./db');
 const tempStore = require('./tempStore');
 const pyrusRoutes = require('./routes/pyrus');
 const sendpulseRoutes = require('./routes/sendpulse');
+const { scheduleCleanup } = require('./cleanup');
 
 const app = express();
 
@@ -47,6 +48,7 @@ app.get('/temp/:uuid', (req, res) => {
 
 async function start() {
   await db.initSchema();
+  scheduleCleanup();
   app.listen(config.port, () => {
     console.log(`Server running on port ${config.port}`);
   });

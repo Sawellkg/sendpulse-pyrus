@@ -143,6 +143,24 @@ async function updateMessageCommentId(mid, pyrusCommentId) {
   await pool.query('UPDATE messages SET pyrus_comment_id = $1 WHERE mid = $2', [pyrusCommentId, mid]);
 }
 
+async function deleteStaleConversations(retentionInterval) {
+  // Nullify messages.conversation_id first to avoid FK constraint violation
+  await pool.query(`
+    UPDATE messages SET conversation_id = NULL
+    WHERE conversation_id IN (
+      SELECT id FROM conversations
+      WHERE COALESCE(last_activity_at, created_at) <= NOW() - $1::INTERVAL
+    )
+  `, [retentionInterval]);
+
+  const { rowCount } = await pool.query(`
+    DELETE FROM conversations
+    WHERE COALESCE(last_activity_at, created_at) <= NOW() - $1::INTERVAL
+  `, [retentionInterval]);
+
+  return rowCount;
+}
+
 // file_refs — maps temp UUID to Pyrus file ID for re-download
 
 async function saveFileRef(uuid, pyrusFileId, contentType, fileName) {
@@ -169,6 +187,7 @@ module.exports = {
   createConversation,
   updateConversationTaskId,
   touchConversation,
+  deleteStaleConversations,
   saveMessage,
   getMessage,
   updateMessageCommentId,
