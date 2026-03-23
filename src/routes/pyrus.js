@@ -133,7 +133,7 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
     const conversation = await db.getConversation(account.account_id, channel_id);
     if (!conversation) {
       console.warn(`[pyrus/sendmessage] No conversation for channel_id=${channel_id}`);
-      return res.json({ status: 'ok' });
+      return res.status(400).json({ error_code: 'external_error', error: 'Диалог не найден. Возможно, история была очищена.' });
     }
 
     const spParams = {
