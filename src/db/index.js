@@ -121,6 +121,14 @@ async function deleteStaleConversations(retentionInterval) {
   return rowCount;
 }
 
+async function deleteStaleFileRefs(retentionInterval) {
+  const { rowCount } = await pool.query(
+    `DELETE FROM file_refs WHERE created_at <= NOW() - $1::INTERVAL`,
+    [retentionInterval]
+  );
+  return rowCount;
+}
+
 // file_refs — maps temp UUID to Pyrus file ID for re-download
 
 async function saveFileRef(uuid, pyrusFileId, contentType, fileName) {
@@ -148,6 +156,7 @@ module.exports = {
   updateConversationTaskId,
   touchConversation,
   deleteStaleConversations,
+  deleteStaleFileRefs,
   saveFileRef,
   getFileRef,
 };

@@ -6,13 +6,20 @@ const INTERVAL_MS = 7 * 24 * 60 * 60 * 1000; // 1 week
 const RETENTION_INTERVAL = '3 months';
 
 async function runCleanup() {
-  console.log('[cleanup] Starting stale conversations cleanup...');
+  console.log('[cleanup] Starting scheduled cleanup...');
   try {
-    const deleted = await db.deleteStaleConversations(RETENTION_INTERVAL);
-    console.log(`[cleanup] Done. Deleted ${deleted} conversation(s) with no activity for ${RETENTION_INTERVAL}.`);
+    const deletedConvs = await db.deleteStaleConversations(RETENTION_INTERVAL);
+    console.log(`[cleanup] Deleted ${deletedConvs} conversation(s) with no activity for ${RETENTION_INTERVAL}.`);
   } catch (err) {
-    console.error('[cleanup] Error during cleanup:', err.message);
+    console.error('[cleanup] Error cleaning conversations:', err.message);
   }
+  try {
+    const deletedRefs = await db.deleteStaleFileRefs(RETENTION_INTERVAL);
+    console.log(`[cleanup] Deleted ${deletedRefs} file_ref(s) older than ${RETENTION_INTERVAL}.`);
+  } catch (err) {
+    console.error('[cleanup] Error cleaning file_refs:', err.message);
+  }
+  console.log('[cleanup] Done.');
 }
 
 function scheduleCleanup() {
