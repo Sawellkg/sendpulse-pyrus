@@ -215,6 +215,7 @@ router.post('/sendmessage', verifySignature, async (req, res) => {
       }
     }
 
+    db.touchConversation(conversation.id).catch(() => {});
     res.json({ status: 'ok' });
   } catch (err) {
     console.error('[pyrus/sendmessage]', err.message);

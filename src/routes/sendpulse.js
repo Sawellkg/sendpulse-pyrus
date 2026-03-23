@@ -328,6 +328,8 @@ async function handleIncoming(event) {
     attachments: attachmentGuids.length ? attachmentGuids : undefined,
   });
 
+  db.touchConversation(conversation.id).catch(() => {});
+
   const taskId = msgRes?.tasks?.[0]?.task_id;
   if (taskId && taskId !== conversation.pyrus_task_id) {
     // New task created (or recreated after deletion) — update stored id and fill form fields
@@ -418,6 +420,8 @@ async function handleOutgoing(event) {
     messageTextHtml: `<b>${authorLabel}:</b> ${messageText}`,
     messageId: mid || undefined,
   });
+
+  db.touchConversation(conversation.id).catch(() => {});
 }
 
 async function findAccountByBotId(botId) {

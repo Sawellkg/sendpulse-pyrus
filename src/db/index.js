@@ -15,6 +15,7 @@ async function initSchema() {
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS conversation_id INTEGER REFERENCES conversations(id);`).catch(() => {});
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS payload JSONB;`).catch(() => {});
   await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachments_json JSONB;`).catch(() => {});
+  await pool.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ;`).catch(() => {});
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS accounts (
@@ -117,6 +118,10 @@ async function updateConversationTaskId(id, pyrusTaskId) {
   await pool.query('UPDATE conversations SET pyrus_task_id = $1 WHERE id = $2', [pyrusTaskId, id]);
 }
 
+async function touchConversation(id) {
+  await pool.query('UPDATE conversations SET last_activity_at = NOW() WHERE id = $1', [id]);
+}
+
 // messages
 
 async function saveMessage(mid, text, direction = 'incoming', conversationId = null, payload = null, attachmentsJson = null) {
@@ -163,6 +168,7 @@ module.exports = {
   getConversationByTaskId,
   createConversation,
   updateConversationTaskId,
+  touchConversation,
   saveMessage,
   getMessage,
   updateMessageCommentId,
