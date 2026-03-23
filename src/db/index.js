@@ -11,10 +11,7 @@ async function initSchema() {
   await pool.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS access_token TEXT;`).catch(() => {});
   await pool.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS enabled BOOLEAN NOT NULL DEFAULT TRUE;`).catch(() => {});
   await pool.query(`ALTER TABLE accounts ADD COLUMN IF NOT EXISTS deleted BOOLEAN NOT NULL DEFAULT FALSE;`).catch(() => {});
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS direction TEXT DEFAULT 'incoming';`).catch(() => {});
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS conversation_id INTEGER REFERENCES conversations(id);`).catch(() => {});
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS payload JSONB;`).catch(() => {});
-  await pool.query(`ALTER TABLE messages ADD COLUMN IF NOT EXISTS attachments_json JSONB;`).catch(() => {});
+  await pool.query(`DROP TABLE IF EXISTS messages CASCADE;`).catch(() => {});
   await pool.query(`ALTER TABLE conversations ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ;`).catch(() => {});
 
   await pool.query(`
@@ -36,13 +33,6 @@ async function initSchema() {
       pyrus_task_id        INTEGER,
       created_at           TIMESTAMPTZ DEFAULT NOW(),
       UNIQUE(account_id, sendpulse_contact_id)
-    );
-
-    CREATE TABLE IF NOT EXISTS messages (
-      mid              TEXT PRIMARY KEY,
-      text             TEXT NOT NULL,
-      pyrus_comment_id INTEGER,
-      created_at       TIMESTAMPTZ DEFAULT NOW()
     );
 
     CREATE TABLE IF NOT EXISTS file_refs (
@@ -122,37 +112,7 @@ async function touchConversation(id) {
   await pool.query('UPDATE conversations SET last_activity_at = NOW() WHERE id = $1', [id]);
 }
 
-// messages
-
-async function saveMessage(mid, text, direction = 'incoming', conversationId = null, payload = null, attachmentsJson = null) {
-  await pool.query(
-    `INSERT INTO messages (mid, text, direction, conversation_id, payload, attachments_json)
-     VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (mid) DO NOTHING`,
-    [mid, text || '', direction, conversationId,
-     payload ? JSON.stringify(payload) : null,
-     attachmentsJson ? JSON.stringify(attachmentsJson) : null]
-  );
-}
-
-async function getMessage(mid) {
-  const { rows } = await pool.query('SELECT * FROM messages WHERE mid = $1', [mid]);
-  return rows[0] || null;
-}
-
-async function updateMessageCommentId(mid, pyrusCommentId) {
-  await pool.query('UPDATE messages SET pyrus_comment_id = $1 WHERE mid = $2', [pyrusCommentId, mid]);
-}
-
 async function deleteStaleConversations(retentionInterval) {
-  // Nullify messages.conversation_id first to avoid FK constraint violation
-  await pool.query(`
-    UPDATE messages SET conversation_id = NULL
-    WHERE conversation_id IN (
-      SELECT id FROM conversations
-      WHERE COALESCE(last_activity_at, created_at) <= NOW() - $1::INTERVAL
-    )
-  `, [retentionInterval]);
-
   const { rowCount } = await pool.query(`
     DELETE FROM conversations
     WHERE COALESCE(last_activity_at, created_at) <= NOW() - $1::INTERVAL
@@ -188,9 +148,6 @@ module.exports = {
   updateConversationTaskId,
   touchConversation,
   deleteStaleConversations,
-  saveMessage,
-  getMessage,
-  updateMessageCommentId,
   saveFileRef,
   getFileRef,
 };
