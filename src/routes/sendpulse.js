@@ -110,6 +110,12 @@ function extractChatItemContent(item) {
     return { text: title, attachments: atts };
   }
 
+  if (type === 'ig_story') {
+    const url = data.message?.attachment?.payload?.story_media_url || '';
+    const atts = url ? [{ type, payload: { story_media_url: url } }] : [];
+    return { text: '', attachments: atts };
+  }
+
   return { text: '', attachments: [] };
 }
 
@@ -142,7 +148,7 @@ const contactQueue = require('../contactQueue');
  * If the URL points to our own /temp endpoint, re-downloads from Pyrus using stored file_ref.
  */
 async function resolveAttachmentBuffer(att) {
-  const url = att.payload?.url || '';
+  const url = att.payload?.url || att.payload?.story_media_url || '';
   const tempPrefix = `${serviceUrl}/temp/`;
 
   if (url.startsWith(tempPrefix)) {
@@ -189,7 +195,7 @@ async function downloadAndUploadAttachments(attachments) {
   const tempFiles = [];
 
   for (const att of attachments) {
-    if (!att.payload?.url) continue;
+    if (!att.payload?.url && !att.payload?.story_media_url) continue;
     let filePath;
     try {
       const { buffer, contentType, fileName } = await resolveAttachmentBuffer(att);
