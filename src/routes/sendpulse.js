@@ -43,7 +43,7 @@ function extractMessageText(channelData) {
     const mediaType = (media.media_type || 'IMAGE').toUpperCase() === 'VIDEO' ? 'video' : 'image';
 
     const text = [`Комментарий к посту: ${permalink}`, caption, commentText].filter(Boolean).join('\n\n');
-    const htmlParts = [`<b>Комментарий к посту: ${permalink}</b>`];
+    const htmlParts = [`<mark data-color="blue"><b><a href="${permalink}">Комментарий к посту</a></b></mark>`];
     if (caption) htmlParts.push(`<q>${caption}</q>`);
     if (commentText) htmlParts.push(`<b>${commentText}</b>`);
     const html = htmlParts.join('<br>');
@@ -335,7 +335,7 @@ async function handleIncoming(event) {
     attachments: attachmentGuids.length ? attachmentGuids : undefined,
   });
 
-  db.touchConversation(conversation.id).catch(() => {});
+  db.touchConversation(conversation.id).catch(() => { });
 
   const taskId = msgRes?.tasks?.[0]?.task_id;
   if (taskId && taskId !== conversation.pyrus_task_id) {
@@ -428,7 +428,7 @@ async function handleOutgoing(event) {
     messageId: mid || undefined,
   });
 
-  db.touchConversation(conversation.id).catch(() => {});
+  db.touchConversation(conversation.id).catch(() => { });
 }
 
 async function findAccountByBotId(botId) {
