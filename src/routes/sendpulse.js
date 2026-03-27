@@ -37,7 +37,7 @@ function extractMessageText(channelData) {
   // Comment on a post — returns object with html and postMedia
   if (media && media.permalink) {
     const permalink = media.permalink;
-    const caption = media.caption || '';
+    const caption = media.caption.slice(0, 300) || '';
     const commentText = msg.text || '';
     const mediaUrl = media.media_url || null;
     const mediaType = (media.media_type || 'IMAGE').toUpperCase() === 'VIDEO' ? 'video' : 'image';
