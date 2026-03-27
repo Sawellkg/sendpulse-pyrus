@@ -70,6 +70,7 @@ async function sendIncomingMessage({ accountId, channelId, senderName, messageTe
   if (messageType)                  body.message_type = messageType;
   if (mappings)                     body.mappings = mappings;
   if (attachments?.length)          body.attachments = attachments;
+  console.log('[pyrusApi] /getmessage request:', JSON.stringify(body));
   const result = await call('post', '/getmessage', body);
   console.log('[pyrusApi] /getmessage response:', JSON.stringify(result));
   return result;
