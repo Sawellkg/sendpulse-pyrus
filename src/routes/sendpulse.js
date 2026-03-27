@@ -323,7 +323,13 @@ async function handleIncoming(event) {
   // Detect message type
   const isPostComment = !!(channelData.media && channelData.media.permalink);
 
-  // Send to Pyrus — no mappings yet, check response first
+  // Contact mappings sent with every message
+  const contactMappings = [
+    { code: 'SenderName', value: (contact.name || '').slice(0, 300) },
+    { code: 'accauntName', value: (contact.username || '').slice(0, 300) },
+    { code: 'SenderAccountUrl', value: contact.username ? `https://instagram.com/${contact.username}` : '' },
+  ].filter(m => m.value);
+
   const msgRes = await pyrusApi.sendIncomingMessage({
     accountId: account.sp_bot_id,
     channelId: contact.id,
@@ -333,19 +339,17 @@ async function handleIncoming(event) {
     messageId: mid || undefined,
     messageType: isPostComment ? 'post_comment' : 'direct',
     attachments: attachmentGuids.length ? attachmentGuids : undefined,
+    mappings: contactMappings.length ? contactMappings : undefined,
   });
 
   db.touchConversation(conversation.id).catch(() => { });
 
   const taskId = msgRes?.tasks?.[0]?.task_id;
   if (taskId && taskId !== conversation.pyrus_task_id) {
-    // New task created (or recreated after deletion) — update stored id and fill form fields
+    // New task created (or recreated after deletion) — fill task-level fields
     await db.updateConversationTaskId(conversation.id, taskId);
-    const mappings = [
-      { code: 'SenderName', value: (contact.name || '').slice(0, 300) },
+    const taskMappings = [
       { code: 'Subject', value: messageText.slice(0, 300) },
-      { code: 'accauntName', value: (contact.username || '').slice(0, 300) },
-      { code: 'SenderAccountUrl', value: contact.username ? `https://instagram.com/${contact.username}` : '' },
       { code: 'MessageType', value: isPostComment ? 'Comment' : 'Direct' },
       { code: 'PostUrl', value: isPostComment ? (channelData.media.permalink || '') : '' },
     ].filter(m => m.value);
@@ -355,7 +359,7 @@ async function handleIncoming(event) {
       senderName: contact.username || contact.name || 'Неизвестный',
       messageText: ' ',
       messageType: isPostComment ? 'post_comment' : 'direct',
-      mappings,
+      mappings: taskMappings,
     });
   }
 }
