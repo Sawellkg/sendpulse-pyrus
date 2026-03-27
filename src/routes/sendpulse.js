@@ -56,10 +56,10 @@ function extractMessageText(channelData) {
   }
 
 
-  // Reel or media attachments — files uploaded separately, URLs omitted here
+  // Reel/post attachments — files uploaded separately, extract titles for text
   if (attachments.length > 0) {
     const labels = attachments
-      .filter(att => att.type === 'ig_reel' && att.payload?.title)
+      .filter(att => (att.type === 'ig_reel' || att.type === 'ig_post') && att.payload?.title)
       .map(att => att.payload.title.slice(0, 300));
     return [msg.text, ...labels].filter(Boolean).join('\n');
   }
@@ -103,7 +103,7 @@ function extractChatItemContent(item) {
     return { text: '', attachments: atts };
   }
 
-  if (type === 'ig_reel') {
+  if (type === 'ig_reel' || type === 'ig_post') {
     const title = data.message?.attachment?.payload?.title || '';
     const url = data.message?.attachment?.payload?.url || '';
     const atts = url ? [{ type, payload: { url } }] : [];
@@ -195,6 +195,7 @@ async function downloadAndUploadAttachments(attachments) {
   const tempFiles = [];
 
   for (const att of attachments) {
+    if (att.type === 'share') continue; // duplicate of ig_post, skip
     if (!att.payload?.url && !att.payload?.story_media_url) continue;
     let filePath;
     try {
